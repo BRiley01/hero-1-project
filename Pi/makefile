@@ -5,14 +5,14 @@ all: speechSynth
 debug: CXX += -DDEBUG -g
 debug: speechSynth
 
-speechSynth: speechSynth.o speech.o
-	$(CXX) speechSynth.o speech.o -lsqlite3 -o speechSynth
+speechSynth: obj/speechSynth.o obj/speech.o
+	$(CXX) obj/speechSynth.o obj/speech.o -lsqlite3 -o bin/speechSynth
 
-speechSynth.o: speechSynth.cpp
-	$(CXX) -c speechSynth.cpp
+obj/speechSynth.o: src/Apps/speechSynth.cpp
+	$(CXX) -c src/Apps/speechSynth.cpp -o $@
 	
-speech.o: speech.cpp
-	$(CXX) -c speech.cpp
+obj/speech.o: src/speech/speech.cpp
+	$(CXX) -c src/speech/speech.cpp -o $@
 
 clean:
-	rm -rf *o speechSynth
+	rm -f obj/* bin/speechSynth

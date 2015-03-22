@@ -1,5 +1,5 @@
 #include <iostream>
-#include "speech.h"
+#include "../speech/speech.h"
 
 using namespace std;
 int main(int argc, char **argv)
