@@ -1,0 +1,5 @@
+Pi/obj/
+*.o
+Pi/bin/
+Pi/src/speech/CMU/createdb
+Pi/src/speech/Tests/speechMaster
