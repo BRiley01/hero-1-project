@@ -90,7 +90,8 @@ void receiveData(int byteCount)
 {
   if(speaking)
   {
-    Serial.println("receive called while speaking");
+    
+	Serial.println("receive called while speaking");
     return;
   }  
   
