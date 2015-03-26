@@ -10,7 +10,8 @@
         STATUS_LOADING 0x02
         STATUS_SPEACH_READY 0x03
         STATUS_SPEAKING 0x04
-        STATUS_ABORTING 0x05
+        STATUS_WAIT_AR 0x05
+        STATUS_ABORTING 0x06
         STATUS_FAULT 0xFF
     0x01: SAY
       OPERAND:
@@ -46,7 +47,8 @@
 #define STATUS_LOADING 0x02
 #define STATUS_SPEACH_READY 0x03
 #define STATUS_SPEAKING 0x04
-#define STATUS_ABORTING 0x05
+#define STATUS_WAIT_AR 0x05
+#define STATUS_ABORTING 0x06
 #define STATUS_FAULT 0xFF
 
 volatile byte buffer[BUFFER_SIZE];
@@ -54,6 +56,7 @@ volatile byte respBuffer[RESP_BUFFER_SIZE];
 volatile int receivedBytes, sendBytes;
 volatile int state;
 int speechIndex;
+int waitCnt;
 
 void setup() 
 {
@@ -101,6 +104,18 @@ void loop()
       speechIndex = 0;
       state = STATUS_SPEAKING;
       break;
+    case STATUS_WAIT_AR:
+      //  Wait for AR=1 when chip is ready
+      if(digitalRead(AR) == 0 && waitCnt <= 1000)
+      {
+        delay(100);
+        waitCnt++;  
+      }
+      else
+        state = STATUS_SPEAKING;
+      if(waitCnt >= 1000)
+        state = STATUS_FAULT;     
+      break;
     case STATUS_SPEAKING: 
       if(buffer[speechIndex] == 0xFF)
       {
@@ -126,14 +141,8 @@ void pronounce(byte phoneme)
   digitalWrite(STB, HIGH);
   delayMicroseconds(2);
   digitalWrite(STB, LOW);
-  //  Wait for AR=1 when chip is ready
-  while (digitalRead(AR) == 0 && i <= 1000 && state != STATUS_ABORTING)
-  {
-    delay(100);
-    i++;  
-  }
-  if(i >= 1000)
-    state = STATUS_FAULT;
+  waitCnt = 0;
+  state = STATUS_WAIT_AR;
 }
 
 void SplitInt(int val, volatile byte* out)
@@ -182,6 +191,8 @@ void receiveData(int byteCount)
     {      
       buffer[receivedBytes] = Wire.read();
       receivedBytes++;
+      if(receivedBytes == BUFFER_SIZE) //prevent buffer overrun
+        buffer[receivedBytes-1] = 0xFF;
       if(buffer[receivedBytes-1] == 0xFF)
       {
         state = STATUS_SPEACH_READY;        
