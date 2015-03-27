@@ -30,6 +30,7 @@
 	 
 #define STB 5  // Strobe need to go high to latch datas
 #define AR 3  // Acknowledge/Request goes high when ready
+#define AR_IRQ 1
 #define POWER 4
 #define PITCH1 A1
 #define PITCH2 A2
@@ -71,6 +72,9 @@ void setup()
   Wire.onReceive(receiveData);
   Wire.onRequest(sendData);
   
+  //Attach interrupt for A/R
+  attachInterrupt(AR_IRQ, AR_HIGH, RISING);
+  
   // set Port B 6 lowest bit Output (Arduino Uno pin 8 to 13)
   DDRB = B00111111; 
 
@@ -88,8 +92,14 @@ void setup()
 	 
 void loop() 
 {
-  if(state != STATUS_READY)
-    Serial.println(state);
+  /*if(state != STATUS_READY)
+  {
+    Serial.print(state);
+    Serial.print("-");
+    Serial.print(waitCnt);
+    Serial.print("-");
+    Serial.println(speechIndex);
+  }*/
   switch(state)
   {
     case STATUS_ABORTING:
@@ -97,7 +107,7 @@ void loop()
       break;
     case STATUS_READY:
     case STATUS_LOADING:
-      delay(100);
+      //delay(100);
       break;
     case STATUS_SPEACH_READY:
       digitalWrite(POWER, HIGH);
@@ -106,14 +116,12 @@ void loop()
       break;
     case STATUS_WAIT_AR:
       //  Wait for AR=1 when chip is ready
-      if(digitalRead(AR) == 0 && waitCnt <= 1000)
+      if(/*digitalRead(AR) == 0 &&*/ waitCnt <= 20)
       {
-        delay(100);
+      //`  delay(100);
         waitCnt++;  
       }
-      else
-        state = STATUS_SPEAKING;
-      if(waitCnt >= 1000)
+      if(waitCnt >= 20)
         state = STATUS_FAULT;     
       break;
     case STATUS_SPEAKING: 
@@ -124,12 +132,13 @@ void loop()
       }
       else
       {
-        noInterrupts();
+        //noInterrupts();
         pronounce(buffer[speechIndex]);
-        interrupts();
+        //interrupts();
+        speechIndex++;
       } 
   }
-  delay(100);
+  delay(20);
 }
 
 void pronounce(byte phoneme) 
@@ -151,6 +160,12 @@ void SplitInt(int val, volatile byte* out)
   out[1] = (val >> 16) & 0xFF;
   out[2] = (val >> 8) & 0xFF;
   out[3] = val & 0xFF;
+}
+
+void AR_HIGH()
+{
+  if(state == STATUS_WAIT_AR)
+    state = STATUS_SPEAKING;
 }
 	 
 // callback for received data
