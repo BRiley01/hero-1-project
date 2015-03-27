@@ -103,11 +103,62 @@ void Speech::toUpper(string& s) {
    }
 }
 
+bool Speech::sendOpCode(int opcode) 
+{
+	int opResult = 0;
+	opResult = write(_i2cHandle, &opcode, 1);
+	if(opResult != 1)
+	{ 
+#ifdef DEBUG
+		cout << "No ACK bit!\n";
+#endif			
+	}	
+}
+
+int Speech::Status()
+{
+	char rxBuffer[5];	//	receive buffer
+	if(!sendOpCode(SPEECH_OPCODE_STATUS))
+	{
+#ifdef DEBUG
+		cout << "Status request failed\n";
+#endif	
+		return SPEECH_STATUS_FAULT;
+	}
+	usleep(1000); //sleep for 1 millisecond
+	read(_i2cHandle, rxBuffer, 5);	
+	if(rxBuffer[0] != SPEECH_OPCODE_STATUS)
+	{
+#ifdef DEBUG
+		cout << "Unexpected Response OPCODE\n";
+#endif	
+		Abort();
+		return SPEECH_STATUS_FAULT;
+	}
+	return rxBuffer[1];
+}
+
+void Speech::Abort()
+{
+#ifdef DEBUG
+	cout << "ABORT CALLED\n";
+#endif
+	
+	if(!sendOpCode(SPEECH_OPCODE_ABORT))
+	{
+#ifdef DEBUG
+		cout << "No ACK bit!\n";
+#endif			
+	}
+}
+
 bool Speech::send(vector<unsigned char> bytes)
 {
 	int opResult = 0;
 	unsigned char c;
 	char rxBuffer[32];	//	receive buffer
+	
+	sendOpCode(SPEECH_OPCODE_SAY);
 	for (vector<unsigned char>::iterator byte = bytes.begin(); byte != bytes.end(); ++byte)
 	{
 		c = *byte;
