@@ -8,7 +8,7 @@
       RESPONSE: 
         STATUS_READY 0x01
         STATUS_LOADING 0x02
-        STATUS_SPEACH_READY 0x03
+        STATUS_SPEECH_READY 0x03
         STATUS_SPEAKING 0x04
         STATUS_WAIT_AR 0x05
         STATUS_ABORTING 0x06
@@ -46,7 +46,7 @@
 
 #define STATUS_READY 0x01
 #define STATUS_LOADING 0x02
-#define STATUS_SPEACH_READY 0x03
+#define STATUS_SPEECH_READY 0x03
 #define STATUS_SPEAKING 0x04
 #define STATUS_WAIT_AR 0x05
 #define STATUS_ABORTING 0x06
@@ -103,26 +103,32 @@ void loop()
   switch(state)
   {
     case STATUS_ABORTING:
+      digitalWrite(POWER, LOW);
       state = STATUS_READY;
       break;
     case STATUS_READY:
     case STATUS_LOADING:
       //delay(100);
       break;
-    case STATUS_SPEACH_READY:
+    case STATUS_FAULT:
+      digitalWrite(POWER, LOW);
+      break;
+    case STATUS_SPEECH_READY:
       digitalWrite(POWER, HIGH);
       speechIndex = 0;
       state = STATUS_SPEAKING;
       break;
     case STATUS_WAIT_AR:
       //  Wait for AR=1 when chip is ready
-      if(/*digitalRead(AR) == 0 &&*/ waitCnt <= 20)
+      if(digitalRead(AR) != 0)
+        AR_HIGH();
+      else
       {
-      //`  delay(100);
-        waitCnt++;  
+        if(waitCnt <= 100)
+          waitCnt++;  
+        if(waitCnt >= 100) 
+          state = STATUS_FAULT;     
       }
-      if(waitCnt >= 20)
-        state = STATUS_FAULT;     
       break;
     case STATUS_SPEAKING: 
       if(buffer[speechIndex] == 0xFF)
@@ -132,9 +138,7 @@ void loop()
       }
       else
       {
-        //noInterrupts();
         pronounce(buffer[speechIndex]);
-        //interrupts();
         speechIndex++;
       } 
   }
@@ -184,7 +188,7 @@ void receiveData(int byteCount)
           sendBytes = 2;
           break;        
         case OPCODE_SAY:
-          if(state != STATUS_SPEACH_READY)
+          if(state != STATUS_SPEECH_READY)
           {
             state = STATUS_LOADING;
             receivedBytes = 0; 
@@ -210,7 +214,7 @@ void receiveData(int byteCount)
         buffer[receivedBytes-1] = 0xFF;
       if(buffer[receivedBytes-1] == 0xFF)
       {
-        state = STATUS_SPEACH_READY;        
+        state = STATUS_SPEECH_READY;        
         sendBytes = 5;
         respBuffer[0] = OPCODE_SAY;        
         SplitInt(receivedBytes, &respBuffer[1]);
