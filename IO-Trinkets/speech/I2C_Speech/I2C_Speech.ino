@@ -107,7 +107,7 @@ void loop()
       break;
     case STATUS_READY:
     case STATUS_LOADING:
-      delay(100);
+      //delay(100);
       break;
     case STATUS_SPEACH_READY:
       digitalWrite(POWER, HIGH);
@@ -118,7 +118,7 @@ void loop()
       //  Wait for AR=1 when chip is ready
       if(/*digitalRead(AR) == 0 &&*/ waitCnt <= 20)
       {
-        delay(100);
+      //`  delay(100);
         waitCnt++;  
       }
       if(waitCnt >= 20)
@@ -138,7 +138,7 @@ void loop()
         speechIndex++;
       } 
   }
-  delay(100);
+  delay(20);
 }
 
 void pronounce(byte phoneme) 
