@@ -27,6 +27,7 @@
 */        
       
 #include <Wire.h>
+#include <avr/pgmspace.h>
 	 
 #define STB 5  // Strobe need to go high to latch datas
 #define AR 3  // Acknowledge/Request goes high when ready
@@ -37,7 +38,7 @@
 
 #define SLAVE_ADDRESS 0x04
 
-#define RESP_BUFFER_SIZE 5
+#define RESP_BUFFER_SIZE 6
 #define BUFFER_SIZE 1024
 
 #define OPCODE_STATUS 0x00
@@ -58,14 +59,16 @@ volatile byte buffer[BUFFER_SIZE];
 volatile byte respBuffer[RESP_BUFFER_SIZE];
 volatile int receivedBytes, sendBytes;
 volatile int state;
-volatile byte* phoneme_ptr;
+const byte* phoneme_ptr;
 volatile byte speechType;
+volatile int speechOffset;
 int waitCnt;
+
 
 const int kSpeechBase = 0xFA4B;
 
 //Historic Hero1 speeches
-byte speeches[] = { /*0xFA4B*/  0X16,0X01,0X18,0X26,0X2D,0X3E,0X0C,0X15,0X00,0X3C,0X0D,0X20,0X09,0X0C,0X03,0X0B,0X12,0X03,0X1B,0X2C,0X2B,0X26,0X2D,0X3F,0XFF,
+const PROGMEM byte speeches[] = { /*0xFA4B*/  0X16,0X01,0X18,0X26,0X2D,0X3E,0X0C,0X15,0X00,0X3C,0X0D,0X20,0X09,0X0C,0X03,0X0B,0X12,0X03,0X1B,0X2C,0X2B,0X26,0X2D,0X3F,0XFF,
                     /*0xFA64*/  0X16,0X01,0X18,0X26,0X2D,0X3E,0X15,0X00,0X09,0X29,0X2F,0X00,0X0C,0X96,0XBC,0XBC,0XAB,0XB5,0XB7,0X38,0X32,0X23,0X1B,0X3C,0X29,0X39,0X02,0X1E,0X1A,0X36,0X19,0X06,0X29,0X11,0X23,0X0D,0X23,0X18,0X6B,0X75,0X77,0X0E,0X15,0X23,0X2A,0X3F,0XFF,
                     /*0xFA93*/  0X15,0X00,0x09,0X29,0X19,0X2F,0X00,0X0D,0X6A,0X7D,0X59,0X3E,0X18,0X23,0x08,0X29,0X19,0XB8,0X89,0X8A,0X9F,0X3F,0XFF,
                     /*0xFAAA*/  0X15,0X00,0x09,0X29,0X19,0X2F,0x00,0X0D,0XC,0X37,0X37,0XF,0XC,0X15,0x00,0x09,0X29,0X55,0X6B,0X4C,0X3F,0XFF,
@@ -125,20 +128,25 @@ void setup()
   digitalWrite(POWER, LOW);
   receivedBytes = 0;
   state = STATUS_READY;
+  
+  for(int xx = 0; xx < 300; xx++)
+  {
+    Serial.println(pgm_read_byte(&speeches[xx]));    
+  }
 }
 	 
 void loop() 
 {
-  if(state != STATUS_READY)
+  /*if(state != STATUS_READY)
   {
     Serial.print(state);
     Serial.print("-");
     Serial.println(speechType);
-    /*Serial.print("-");
-    Serial.print(waitCnt);
-    Serial.print("-");
-    Serial.println(*phoneme_ptr);*/
-  }
+    //Serial.print("-");
+    //Serial.print(waitCnt);
+    //Serial.print("-");
+    //Serial.println(*phoneme_ptr);
+  }*/
   switch(state)
   {
     case STATUS_ABORTING:
@@ -176,12 +184,18 @@ void loop()
       }
       else
       {
-        pronounce(*phoneme_ptr);
+        /*Serial.print((int)phoneme_ptr);
+        Serial.print(" ");
+        Serial.println((int)speeches);*/
+        if(speechType == OPCODE_SAY)
+          pronounce(*phoneme_ptr);
+        else if (speechType == OPCODE_SPEECH)
+          pronounce(pgm_read_byte(phoneme_ptr));
         phoneme_ptr++;
       } 
   }
-  //delay(100);
-  delay(20);
+  delay(100);
+  //delay(20);
 }
 
 void pronounce(byte phoneme) 
@@ -226,7 +240,7 @@ void receiveData(int byteCount)
           buffer[receivedBytes-1] = 0xFF;
         if(buffer[receivedBytes-1] == 0xFF)
         {
-          phoneme_ptr = buffer;
+          phoneme_ptr = (const byte*)buffer;
           state = STATUS_SPEECH_READY;        
           sendBytes = 5;
           respBuffer[0] = OPCODE_SAY;        
@@ -238,8 +252,8 @@ void receiveData(int byteCount)
       {
         if(receivedBytes == 2) //got speech offset, now load preprogrammed speech
         {
-          int offset = kSpeechBase - ((buffer[0] << 8) | (buffer[1]));
-          phoneme_ptr = &(speeches[offset]);
+          speechOffset = ((buffer[0] << 8) | (buffer[1])) - kSpeechBase;
+          phoneme_ptr = &(speeches[speechOffset]);
           state = STATUS_SPEECH_READY;    
         }
       }        
@@ -253,7 +267,22 @@ void receiveData(int byteCount)
         case OPCODE_STATUS:
           respBuffer[0] = OPCODE_STATUS;
           respBuffer[1] = state;
-          sendBytes = 2;
+          if(state == STATUS_WAIT_AR || state == STATUS_SPEAKING)
+          {
+            if(speechType == OPCODE_SAY)
+              respBuffer[2] = *phoneme_ptr;
+            else if (speechType == OPCODE_SPEECH)
+              respBuffer[2] = pgm_read_byte(phoneme_ptr);
+            sendBytes = 3;
+          }
+          else if(state == STATUS_SPEECH_READY && speechType == OPCODE_SPEECH)
+          {
+            sendBytes = 6;
+            SplitInt(speechOffset, &respBuffer[2]);
+            //SplitInt(0, &respBuffer[2]);  
+          } 
+          else
+            sendBytes = 2;
           break;        
         case OPCODE_SPEECH:
         case OPCODE_SAY:
