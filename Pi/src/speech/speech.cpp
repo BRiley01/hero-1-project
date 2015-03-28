@@ -190,8 +190,8 @@ bool Speech::ClassicSpeech(int memAddr)
 	int opResult = 0;
 	char rxBuffer[32];	//	receive buffer
 	//unsigned char* ptr = (unsigned char*)&memAddr;
-	//unsigned char ptr[] = {0xFB, 0xC1};
-	unsigned char ptr[] = {0xFA, 0x4B};
+	unsigned char ptr[] = {0xFB, 0xC1};
+	//unsigned char ptr[] = {0xFA, 0x4B};
 	sendOpCode(SPEECH_OPCODE_SPEECH);
 	
 #ifdef DEBUG
