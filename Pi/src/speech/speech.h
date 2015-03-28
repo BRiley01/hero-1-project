@@ -6,6 +6,7 @@
 #define I2C_SPEECH 0x04
 #define SPEECH_OPCODE_STATUS 0x00
 #define SPEECH_OPCODE_SAY 0x01
+#define SPEECH_OPCODE_SPEECH 0x02
 #define SPEECH_OPCODE_ABORT 0xFE
 
 #define SPEECH_STATUS_READY 0x01
@@ -30,6 +31,7 @@ class Speech
 		Speech(const char* db);
 		~Speech();
 		bool Say(const char* phrase);
-		int Status();
+		bool ClassicSpeech(int memAddr);
+		int Status(unsigned char* data = NULL, int len = 0);
 		void Abort();
 };

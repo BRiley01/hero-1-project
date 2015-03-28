@@ -1,7 +1,7 @@
 #include <iostream>
 #include "../speech/speech.h"
 
-#define BUFFER_SIZE 5
+#define BUFFER_SIZE 6
 
 using namespace std;
 int main(int argc, char **argv)
@@ -25,7 +25,12 @@ int main(int argc, char **argv)
 		cout << "Enter text: ";
 		getline(cin, phrase);
 		if(phrase != "q")
-			sp->Say(phrase.c_str());
+		{
+			cout << "sending" << endl;
+			//sp->ClassicSpeech(0xFBC1);
+			sp->ClassicSpeech(0xFA4B);
+			cout << "sent" << endl;
+		}
 		status = sp->Status(buffer, BUFFER_SIZE);
 		lastStatus = SPEECH_STATUS_READY;
 		while(status != SPEECH_STATUS_READY)
@@ -42,7 +47,10 @@ int main(int argc, char **argv)
 						cout << "loading\n";
 						break;
 					case SPEECH_STATUS_SPEECH_READY:
-						cout << "speech ready\n";
+						cout << "speech ready: " << hex << (int)buffer[2] << ":" 
+							 << (int)buffer[3] << ":" 
+							 << (int)buffer[4] << ":" 
+							 << (int)buffer[5] << endl;
 						break;
 					case SPEECH_STATUS_SPEAKING:
 						cout << "speaking: " << hex << (int)buffer[2] << endl;
@@ -60,10 +68,9 @@ int main(int argc, char **argv)
 						cout << status << "\n";
 				}
 			}
-			//usleep(10000); //sleep for 1 millisecond
+			usleep(100000); //sleep for 1 millisecond
 			status = sp->Status(buffer, BUFFER_SIZE);
 		}
-	
 	}
 	delete sp;
 	

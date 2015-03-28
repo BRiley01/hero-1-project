@@ -115,9 +115,16 @@ bool Speech::sendOpCode(int opcode)
 	}	
 }
 
-int Speech::Status()
+int Speech::Status(unsigned char* data, int len)
 {
-	char rxBuffer[5];	//	receive buffer
+	unsigned char rxBuffer[5];	//	receive buffer
+	if(!data || len == 0)
+	{
+		data = rxBuffer;
+		len = 5;
+	}
+	memset(data, 0, sizeof(unsigned char) * len);
+	
 	if(!sendOpCode(SPEECH_OPCODE_STATUS))
 	{
 #ifdef DEBUG
@@ -126,8 +133,8 @@ int Speech::Status()
 		return SPEECH_STATUS_FAULT;
 	}
 	usleep(1000); //sleep for 1 millisecond
-	read(_i2cHandle, rxBuffer, 5);	
-	if(rxBuffer[0] != SPEECH_OPCODE_STATUS)
+	read(_i2cHandle, data, len);
+	if(*data != SPEECH_OPCODE_STATUS)
 	{
 #ifdef DEBUG
 		cout << "Unexpected Response OPCODE\n";
@@ -135,7 +142,7 @@ int Speech::Status()
 		Abort();
 		return SPEECH_STATUS_FAULT;
 	}
-	return rxBuffer[1];
+	return *(data+1);
 }
 
 void Speech::Abort()
@@ -176,6 +183,42 @@ bool Speech::send(vector<unsigned char> bytes)
 	//cout << "Sent: " << bytes.size() << ", received: " << rxBuffer[0] << endl;
 #endif	
 		return true;
+}
+
+bool Speech::ClassicSpeech(int memAddr)
+{
+	int opResult = 0;
+	char rxBuffer[32];	//	receive buffer
+	//unsigned char* ptr = (unsigned char*)&memAddr;
+	//unsigned char ptr[] = {0xFB, 0xC1};
+	unsigned char ptr[] = {0xFA, 0x4B};
+	sendOpCode(SPEECH_OPCODE_SPEECH);
+	
+#ifdef DEBUG
+	cout << "sending: ";
+	cout << std::hex << *ptr;
+	cout << " ";
+	cout << std::hex << *(ptr+1) << endl;
+#endif
+	
+	opResult = write(_i2cHandle, &ptr[0], 1);
+	if(opResult != 1)
+	{ 
+#ifdef DEBUG
+		cout << "No ACK bit!\n";
+#endif			
+	}
+	usleep(1000); //sleep for 1 millisecond
+	opResult = write(_i2cHandle, &ptr[1], 1);
+	if(opResult != 1)
+	{ 
+#ifdef DEBUG
+		cout << "No ACK bit!\n";
+#endif			
+	}
+	usleep(1000); //sleep for 1 millisecond
+	opResult = read(_i2cHandle, rxBuffer, 32);
+	
 }
 
 bool Speech::Say(const char* phrase)
