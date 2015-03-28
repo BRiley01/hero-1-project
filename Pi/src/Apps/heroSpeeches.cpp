@@ -33,7 +33,8 @@ int main(int argc, char **argv)
 		}
 		status = sp->Status(buffer, BUFFER_SIZE);
 		lastStatus = SPEECH_STATUS_READY;
-		while(status != SPEECH_STATUS_READY)
+		//while(status != SPEECH_STATUS_READY)
+if(false)
 		{
 			if(status != lastStatus)
 			{
@@ -68,7 +69,8 @@ int main(int argc, char **argv)
 						cout << status << "\n";
 				}
 			}
-			usleep(100000); //sleep for 1 millisecond
+			//usleep(100000); //sleep for 1 millisecond
+			//usleep(1000);
 			status = sp->Status(buffer, BUFFER_SIZE);
 		}
 	}
