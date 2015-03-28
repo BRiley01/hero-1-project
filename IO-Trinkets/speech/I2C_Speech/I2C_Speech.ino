@@ -53,7 +53,6 @@
 #define STATUS_ABORTING 0x06
 #define STATUS_FAULT 0xFF
 
-enum SpeechType_t { stFreeForm, stPreProgrammed };
 
 volatile byte buffer[BUFFER_SIZE];
 volatile byte respBuffer[RESP_BUFFER_SIZE];
@@ -130,14 +129,16 @@ void setup()
 	 
 void loop() 
 {
-  /*if(state != STATUS_READY)
+  if(state != STATUS_READY)
   {
     Serial.print(state);
     Serial.print("-");
+    Serial.println(speechType);
+    /*Serial.print("-");
     Serial.print(waitCnt);
     Serial.print("-");
-    Serial.println(speechIndex);
-  }*/
+    Serial.println(*phoneme_ptr);*/
+  }
   switch(state)
   {
     case STATUS_ABORTING:
@@ -153,7 +154,6 @@ void loop()
       break;
     case STATUS_SPEECH_READY:
       digitalWrite(POWER, HIGH);
-      phoneme_ptr = NULL;
       state = STATUS_SPEAKING;
       break;
     case STATUS_WAIT_AR:
@@ -180,6 +180,7 @@ void loop()
         phoneme_ptr++;
       } 
   }
+  //delay(100);
   delay(20);
 }
 
@@ -243,12 +244,6 @@ void receiveData(int byteCount)
         }
       }        
     }
-    else if(state == STATUS_WAIT_AR)
-    {
-      //  Wait for AR=1 when chip is ready
-      if(digitalRead(AR) != 0)
-        AR_HIGH();
-    }
     else
     {
       //not in process of getting bytes to speak, so waiting on next opcode      
@@ -270,7 +265,7 @@ void receiveData(int byteCount)
           }
           else
           {
-            respBuffer[0] = OPCODE_SAY;
+            respBuffer[0] = speechType;
             SplitInt(0, &respBuffer[1]);
             sendBytes = 2;
           }
@@ -280,6 +275,13 @@ void receiveData(int byteCount)
           respBuffer[0] = OPCODE_ABORT;    
           sendBytes = 1;
       }
+    }
+    
+    if(state == STATUS_WAIT_AR)
+    {
+      //  Wait for AR=1 when chip is ready
+      if(digitalRead(AR) != 0)
+        AR_HIGH();
     }
   }
 }
