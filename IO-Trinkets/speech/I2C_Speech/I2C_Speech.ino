@@ -40,6 +40,7 @@
 
 #define RESP_BUFFER_SIZE 6
 #define BUFFER_SIZE 1024
+#define AR_FAULT_INTERVAL 4000 
 
 #define OPCODE_STATUS 0x00
 #define OPCODE_SAY 0x01
@@ -63,6 +64,7 @@ const byte* phoneme_ptr;
 volatile byte speechType;
 volatile int speechOffset;
 int waitCnt;
+long ARStartWait;
 
 
 const int kSpeechBase = 0xFA4B;
@@ -128,25 +130,22 @@ void setup()
   digitalWrite(POWER, LOW);
   receivedBytes = 0;
   state = STATUS_READY;
-  
-  for(int xx = 0; xx < 300; xx++)
-  {
-    Serial.println(pgm_read_byte(&speeches[xx]));    
-  }
 }
 	 
 void loop() 
 {
-  /*if(state != STATUS_READY)
+  //if(state != STATUS_READY || digitalRead(AR) != 0)
+  if(state == STATUS_FAULT)
   {
     Serial.print(state);
     Serial.print("-");
-    Serial.println(speechType);
+    Serial.print("AR: ");
+    Serial.println(digitalRead(AR));
     //Serial.print("-");
     //Serial.print(waitCnt);
     //Serial.print("-");
     //Serial.println(*phoneme_ptr);
-  }*/
+  }
   switch(state)
   {
     case STATUS_ABORTING:
@@ -164,20 +163,24 @@ void loop()
       digitalWrite(POWER, HIGH);
       state = STATUS_SPEAKING;
       break;
-    case STATUS_WAIT_AR:
+    case STATUS_WAIT_AR:      
       //  Wait for AR=1 when chip is ready
-      if(digitalRead(AR) != 0)
+      /*if(digitalRead(AR) != 0)
         AR_HIGH();
       else
-      {
-        if(waitCnt <= 100)
-          waitCnt++;  
-        if(waitCnt >= 100) 
+      {*/
+        if ((unsigned long)(millis() - ARStartWait) >= AR_FAULT_INTERVAL)
           state = STATUS_FAULT;     
-      }
+      //}
       break;
     case STATUS_SPEAKING: 
-      if(*phoneme_ptr == 0xFF)
+      byte phoneme;
+      if(speechType == OPCODE_SAY)
+        phoneme = *phoneme_ptr;
+      else if (speechType == OPCODE_SPEECH)
+        phoneme = pgm_read_byte(phoneme_ptr);
+        
+      if(phoneme == 0xFF)
       {
         state = STATUS_READY; 
         digitalWrite(POWER, LOW);
@@ -187,14 +190,11 @@ void loop()
         /*Serial.print((int)phoneme_ptr);
         Serial.print(" ");
         Serial.println((int)speeches);*/
-        if(speechType == OPCODE_SAY)
-          pronounce(*phoneme_ptr);
-        else if (speechType == OPCODE_SPEECH)
-          pronounce(pgm_read_byte(phoneme_ptr));
+        pronounce(phoneme);
         phoneme_ptr++;
       } 
   }
-  delay(100);
+  //delay(100);
   //delay(20);
 }
 
@@ -209,6 +209,7 @@ void pronounce(byte phoneme)
   digitalWrite(STB, LOW);
   waitCnt = 0;
   state = STATUS_WAIT_AR;
+  ARStartWait = millis();
 }
 
 void SplitInt(int val, volatile byte* out)
@@ -309,8 +310,8 @@ void receiveData(int byteCount)
     if(state == STATUS_WAIT_AR)
     {
       //  Wait for AR=1 when chip is ready
-      if(digitalRead(AR) != 0)
-        AR_HIGH();
+      /*if(digitalRead(AR) != 0)
+        AR_HIGH();*/
     }
   }
 }
