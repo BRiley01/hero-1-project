@@ -106,7 +106,7 @@ void Speech::toUpper(string& s) {
 bool Speech::sendOpCode(int opcode) 
 {
 	int opResult = 0;
-	opResult = write(_i2cHandle, &opcode, 1);
+	opResult = write(&opcode, 1);
 	if(opResult != 1)
 	{ 
 #ifdef DEBUG
@@ -124,24 +124,28 @@ int Speech::Status(unsigned char* data, int len)
 		len = 5;
 	}
 	memset(data, 0, sizeof(unsigned char) * len);
-	
 	if(!sendOpCode(SPEECH_OPCODE_STATUS))
 	{
 #ifdef DEBUG
 		cout << "Status request failed\n";
 #endif	
+cout <<"AAAA";
 		return SPEECH_STATUS_FAULT;
 	}
-	usleep(1000); //sleep for 1 millisecond
-	read(_i2cHandle, data, len);
+	//usleep(1000); //sleep for 1 millisecond
+	read(data, len);
 	if(*data != SPEECH_OPCODE_STATUS)
 	{
 #ifdef DEBUG
-		cout << "Unexpected Response OPCODE\n";
+		cout << "Unexpected Response OPCODE: " << hex << (int)*data << dec << " len: " << len << "\n";
 #endif	
 		Abort();
+cout <<"BBBBB";
 		return SPEECH_STATUS_FAULT;
 	}
+	/*else
+		cout << hex << (int)*(data+1);*/
+		
 	return *(data+1);
 }
 
@@ -159,6 +163,39 @@ void Speech::Abort()
 	}
 }
 
+ssize_t Speech::read(void* buf, size_t count)
+{
+	int tries = 0;
+	int resp = -1;
+	while(tries < I2C_RETRY && resp != count)
+	{
+		resp = ::read(_i2cHandle, buf, count);
+		tries++;
+	}
+#ifdef DEBUG
+	if(tries == I2C_RETRY)
+		cout << "Max Read Attempt Exceeded!\n";
+#endif	
+	return resp;
+}
+		
+ssize_t Speech::write(void* buf, size_t count)
+{
+	int tries = 0;
+	int resp = -1;
+	while(tries < I2C_RETRY && resp != count)
+	{
+		resp = ::write(_i2cHandle, buf, count);
+		tries++;
+	}
+#ifdef DEBUG
+	if(tries == I2C_RETRY)
+		cout << "Max Write Attempt Exceeded!\n";
+#endif	
+	return resp;
+}
+
+
 bool Speech::send(vector<unsigned char> bytes)
 {
 	int opResult = 0;
@@ -169,7 +206,7 @@ bool Speech::send(vector<unsigned char> bytes)
 	for (vector<unsigned char>::iterator byte = bytes.begin(); byte != bytes.end(); ++byte)
 	{
 		c = *byte;
-		opResult = write(_i2cHandle, &c, 1);
+		opResult = write(&c, 1);
 		if(opResult != 1)
 		{ 
 #ifdef DEBUG
@@ -178,46 +215,33 @@ bool Speech::send(vector<unsigned char> bytes)
 		}
 		usleep(1000); //sleep for 1 millisecond
 	}
-	opResult = read(_i2cHandle, rxBuffer, 32);
+	opResult = read(rxBuffer, 32);
 #ifdef DEBUG
 	//cout << "Sent: " << bytes.size() << ", received: " << rxBuffer[0] << endl;
 #endif	
 		return true;
 }
 
-bool Speech::ClassicSpeech(int memAddr)
+bool Speech::ClassicSpeech(unsigned char* memAddr)
 {
 	int opResult = 0;
-	char rxBuffer[32];	//	receive buffer
-	//unsigned char* ptr = (unsigned char*)&memAddr;
-	unsigned char ptr[] = {0xFB, 0xC1};
-	//unsigned char ptr[] = {0xFA, 0x4B};
+	char rxBuffer[32];	//	receive buffer	
 	sendOpCode(SPEECH_OPCODE_SPEECH);
 	
 #ifdef DEBUG
 	cout << "sending: ";
-	cout << std::hex << *ptr;
-	cout << " ";
-	cout << std::hex << *(ptr+1) << endl;
+	cout << std::hex << (int)memAddr[0] << (int)memAddr[1] << endl;
 #endif
 	
-	opResult = write(_i2cHandle, &ptr[0], 1);
-	if(opResult != 1)
+	opResult = write(memAddr, 2);
+	if(opResult != 2)
 	{ 
 #ifdef DEBUG
 		cout << "No ACK bit!\n";
 #endif			
 	}
 	usleep(1000); //sleep for 1 millisecond
-	opResult = write(_i2cHandle, &ptr[1], 1);
-	if(opResult != 1)
-	{ 
-#ifdef DEBUG
-		cout << "No ACK bit!\n";
-#endif			
-	}
-	usleep(1000); //sleep for 1 millisecond
-	opResult = read(_i2cHandle, rxBuffer, 32);
+	opResult = read(rxBuffer, 32);
 	
 }
 
