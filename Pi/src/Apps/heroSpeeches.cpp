@@ -19,24 +19,27 @@ int main(int argc, char **argv)
 		return -1;
 	}
 	
-	string phrase;
-	while(phrase != "q")
+	unsigned char speechBytes[2];
+	int input;
+	while(input != 0)
 	{
 		cout << "Enter text: ";
-		getline(cin, phrase);
-		if(phrase != "q")
+		cin >> hex >> input;
+		if(input != 0)
 		{
+			speechBytes[1] = input & 0xFF;
+			speechBytes[0] = (input >> 8) & 0xFF;
 			cout << "sending" << endl;
 			//sp->ClassicSpeech(0xFBC1);
-			sp->ClassicSpeech(0xFA4B);
+			sp->ClassicSpeech(speechBytes);
 			cout << "sent" << endl;
 		}
 		status = sp->Status(buffer, BUFFER_SIZE);
 		lastStatus = SPEECH_STATUS_READY;
-		//while(status != SPEECH_STATUS_READY)
-if(false)
+		while(status != SPEECH_STATUS_READY)
+		//while(1)
 		{
-			if(status != lastStatus)
+			if(status != lastStatus || true)
 			{
 				lastStatus = status;
 				switch(status)
