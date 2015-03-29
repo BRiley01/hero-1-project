@@ -4,7 +4,7 @@
   First byte received is the opcode:
     0x00: STATUS
       OPERAND: 
-        none
+        nonesendBuf
       RESPONSE: 
         STATUS_READY 0x01
         STATUS_LOADING 0x02
@@ -42,9 +42,9 @@
 #define BUFFER_SIZE 1024
 #define AR_FAULT_INTERVAL 4000 
 
-#define OPCODE_STATUS 0x00
-#define OPCODE_SAY 0x01
-#define OPCODE_SPEECH 0x02
+#define OPCODE_STATUS 0x10
+#define OPCODE_SAY 0x11
+#define OPCODE_SPEECH 0x12
 #define OPCODE_ABORT 0xFE
 
 #define STATUS_READY 0x01
@@ -61,6 +61,7 @@ volatile byte respBuffer[RESP_BUFFER_SIZE];
 volatile int receivedBytes, sendBytes;
 volatile int state;
 const byte* phoneme_ptr;
+volatile byte* send_ptr; //When not null, store data to send
 volatile byte speechType;
 volatile int speechOffset;
 int waitCnt;
@@ -98,13 +99,13 @@ const PROGMEM byte speeches[] = { /*0xFA4B*/  0X16,0X01,0X18,0X26,0X2D,0X3E,0X0C
                     /*0xFE33*/  0X2D,0X35,0X34,0X2B,0XD,0XB,0x09,0X14,0X3E,0X3E,0X3E,0X2D,0X35,0X34,0X2B,0XD,0XB,0x09,0X14,0XB,0x09,0XD,0X2A,0X2B,0X36,0X37,0X37,0X1E,0X3A,0X3E,0X3E,0X3E,0X15,0x00,0x09,0X29,0X1B,0X2F,0x00,0XF,0X1F,0X32,0X31,0XC,0X32,0XD,0X1E,0X38,0X32,0X23,0X25,0X32,0X18,0X21,0X29,0X1F,0X3F,0XFF,
                     /*0xFE6D*/  0X35,0X37,0XD,0X35,0X37,0X3E,0X15,0x00,0x09,0X29,0X1E,0X36,0X37,0X37,0XD,0X15,0X23,0X2A,0X1E,0X36,0X37,0X37,0X2D,0XB,0XD,0X1E,0X35,0X37,0X12,0X3F,0XFF,
                     /*0xFE8C*/  0X15,0x00,0x09,0X29,0X2F,0x00,0XC,0XB,0x09,0XD,0X19,0x06,0x09,0X29,0X25,0X23,0XE,0X23,0X18,0X32,0X23,0XF,0XC,0x06,0X21,0X29,0X19,0XB,0X14,0x06,0X21,0X29,0XC,0XB,0x09,0X1F,0X2A,0x06,0X21,0X29,0X19,0X3E,0X3E,0X3E,0X38,0x00,0x05,0x00,0X2B,0X1D,0X34,0X34,0X2B,0X3E,0X22,0X36,0X37,0X37,0XC,0X32,0X31,0X1F,0X2A,0XE,0X3C,0X29,0X2B,0X3D,0X14,0X3F,0XFF,
-                    /*0xF4A1*/  0X2B,0X3B,0X1E,0X2C,0x03,0XFF,
-                    /*0xF2CC*/  0X18,0X26,0X2D,0X3F,0XF,0X26,0X18,0X2A,0X27,0X2A,0X10,0X3E,0XFF };
+                    /*0xF4A1 (FED2)*/  0X2B,0X3B,0X1E,0X2C,0x03,0XFF,
+                    /*0xF2CC (FED8)*/  0X18,0X26,0X2D,0X3F,0XF,0X26,0X18,0X2A,0X27,0X2A,0X10,0X3E,0XFF };
                       
 void setup() 
 {
-  Serial.begin(9600);
-  Serial.println("Speech Board Loading...");
+  /*Serial.begin(9600);
+  Serial.println("Speech Board Loading...");*/
   
   pinMode(13, OUTPUT);
   // initialize i2c as slave
@@ -130,22 +131,11 @@ void setup()
   digitalWrite(POWER, LOW);
   receivedBytes = 0;
   state = STATUS_READY;
+  send_ptr = respBuffer;
 }
 	 
 void loop() 
 {
-  //if(state != STATUS_READY || digitalRead(AR) != 0)
-  if(state == STATUS_FAULT)
-  {
-    Serial.print(state);
-    Serial.print("-");
-    Serial.print("AR: ");
-    Serial.println(digitalRead(AR));
-    //Serial.print("-");
-    //Serial.print(waitCnt);
-    //Serial.print("-");
-    //Serial.println(*phoneme_ptr);
-  }
   switch(state)
   {
     case STATUS_ABORTING:
@@ -164,14 +154,8 @@ void loop()
       state = STATUS_SPEAKING;
       break;
     case STATUS_WAIT_AR:      
-      //  Wait for AR=1 when chip is ready
-      /*if(digitalRead(AR) != 0)
-        AR_HIGH();
-      else
-      {*/
-        if ((unsigned long)(millis() - ARStartWait) >= AR_FAULT_INTERVAL)
-          state = STATUS_FAULT;     
-      //}
+      if ((unsigned long)(millis() - ARStartWait) >= AR_FAULT_INTERVAL)
+        state = STATUS_FAULT;     
       break;
     case STATUS_SPEAKING: 
       byte phoneme;
@@ -187,15 +171,10 @@ void loop()
       }
       else
       {
-        /*Serial.print((int)phoneme_ptr);
-        Serial.print(" ");
-        Serial.println((int)speeches);*/
         pronounce(phoneme);
         phoneme_ptr++;
       } 
   }
-  //delay(100);
-  //delay(20);
 }
 
 void pronounce(byte phoneme) 
@@ -218,6 +197,11 @@ void SplitInt(int val, volatile byte* out)
   out[1] = (val >> 16) & 0xFF;
   out[2] = (val >> 8) & 0xFF;
   out[3] = val & 0xFF;
+}
+
+void waitSend()
+{
+  while(send_ptr == NULL) delay(1);  
 }
 
 void AR_HIGH()
@@ -244,16 +228,22 @@ void receiveData(int byteCount)
           phoneme_ptr = (const byte*)buffer;
           state = STATUS_SPEECH_READY;        
           sendBytes = 5;
-          respBuffer[0] = OPCODE_SAY;        
-          SplitInt(receivedBytes, &respBuffer[1]);
+          waitSend();
+          send_ptr[0] = OPCODE_SAY;        
+          SplitInt(receivedBytes, &send_ptr[1]);
           break;
         }     
       }
       else if(speechType == OPCODE_SPEECH)
       {
         if(receivedBytes == 2) //got speech offset, now load preprogrammed speech
-        {
-          speechOffset = ((buffer[0] << 8) | (buffer[1])) - kSpeechBase;
+        {        
+          int speechAddr = ((buffer[0] << 8) | (buffer[1]));
+          if(speechAddr == 0xF4A1)
+            speechAddr = 0xFED2;
+          else if(speechAddr == 0xF2CC)
+            speechAddr = 0xFED8;
+          speechOffset = speechAddr - kSpeechBase;
           phoneme_ptr = &(speeches[speechOffset]);
           state = STATUS_SPEECH_READY;    
         }
@@ -266,27 +256,27 @@ void receiveData(int byteCount)
       switch(data)
       {
         case OPCODE_STATUS:
-          respBuffer[0] = OPCODE_STATUS;
-          respBuffer[1] = state;
+          waitSend();
+          send_ptr[0] = OPCODE_STATUS;
+          send_ptr[1] = state;
           if(state == STATUS_WAIT_AR || state == STATUS_SPEAKING)
           {
             if(speechType == OPCODE_SAY)
-              respBuffer[2] = *phoneme_ptr;
+              send_ptr[2] = *phoneme_ptr;
             else if (speechType == OPCODE_SPEECH)
-              respBuffer[2] = pgm_read_byte(phoneme_ptr);
+              send_ptr[2] = pgm_read_byte(phoneme_ptr);
             sendBytes = 3;
           }
           else if(state == STATUS_SPEECH_READY && speechType == OPCODE_SPEECH)
           {
             sendBytes = 6;
             SplitInt(speechOffset, &respBuffer[2]);
-            //SplitInt(0, &respBuffer[2]);  
           } 
           else
             sendBytes = 2;
           break;        
+        case OPCODE_SAY:  
         case OPCODE_SPEECH:
-        case OPCODE_SAY:
           speechType = data;
           if(state != STATUS_SPEECH_READY)
           {
@@ -295,23 +285,18 @@ void receiveData(int byteCount)
           }
           else
           {
-            respBuffer[0] = speechType;
-            SplitInt(0, &respBuffer[1]);
+            waitSend();            
+            send_ptr[0] = speechType;
+            SplitInt(0, &send_ptr[1]);
             sendBytes = 2;
           }
           break;
         case OPCODE_ABORT:
           state = STATUS_ABORTING;  
-          respBuffer[0] = OPCODE_ABORT;    
+          waitSend();
+          send_ptr[0] = OPCODE_ABORT;    
           sendBytes = 1;
       }
-    }
-    
-    if(state == STATUS_WAIT_AR)
-    {
-      //  Wait for AR=1 when chip is ready
-      /*if(digitalRead(AR) != 0)
-        AR_HIGH();*/
     }
   }
 }
@@ -319,13 +304,15 @@ void receiveData(int byteCount)
 // callback for sending data
 void sendData()
 {
-  byte sendBuf[sendBytes];
+  byte* l_sendPtr;
+  while(send_ptr == NULL) delay(1);
+  l_sendPtr = (byte*)send_ptr;
+  send_ptr = NULL;
+  int bytes = sendBytes;
+  sendBytes = 0; 
+  
   int i;
-  if(sendBytes > 0)
-  {
-    for(i=0; i < sendBytes; i++)
-      sendBuf[i] = respBuffer[i];  
-    Wire.write(sendBuf, i+1);
-    sendBytes = 0; 
-  }
+  if(bytes > 0)
+    Wire.write(l_sendPtr, bytes);
+  send_ptr = respBuffer;
 }
