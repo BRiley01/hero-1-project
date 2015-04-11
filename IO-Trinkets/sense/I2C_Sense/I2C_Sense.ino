@@ -38,7 +38,7 @@
 #define OPCODE_STREAM_SOUND 0x02
 #define OPCODE_STOP_STREAM 0xFE
 
-enum SENSE_MODE {OFF, LIGHT, SOUND};
+enum SENSE_MODE {OFF = 0x00, LIGHT = 0x01, SOUND = 0x02};
 volatile boolean StatusReq = false;
 volatile SENSE_MODE sense;
 void setup() 
