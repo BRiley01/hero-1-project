@@ -43,6 +43,8 @@ volatile boolean StatusReq = false;
 volatile SENSE_MODE sense;
 void setup() 
 {
+  //Serial.begin(9600);
+  //Serial.println("Starting");
   sense = OFF;
   pinMode(SELECTOR_PIN, OUTPUT); 
   pinMode(ENABLE_PIN, OUTPUT);
@@ -62,6 +64,9 @@ void setup()
 
 
 void loop() {
+  /*byte data = (PINB & BMASK) | ((PIND & DMASK) << 1);
+  if(sense == LIGHT)  
+    Serial.println(data);*/
   //digitalWrite(SELECTOR_PIN, senseLight);
   //senseLight = !senseLight;    
 }
@@ -104,7 +109,7 @@ void sendData()
   }
   else
   {
-    byte data = (PORTB & BMASK) | ((DDRD & DMASK) << 1);
+    byte data = (PINB & BMASK) | ((PIND & DMASK) >> 5);
     Wire.write(&data, 1);
   }
 }
