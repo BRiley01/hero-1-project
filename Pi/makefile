@@ -22,7 +22,7 @@ obj/speechSynth.o: src/Apps/speechSynth.cpp
 
 
 senseTest: obj/senseTest.o obj/sense.o
-	$(CXX) obj/senseTest.o obj/sense.o -o bin/senseTest
+	$(CXX) obj/senseTest.o obj/sense.o -lwiringPi -o bin/senseTest
 
 obj/senseTest.o: src/Apps/senseTest.cpp
 	$(CXX) -c src/Apps/senseTest.cpp -o $@

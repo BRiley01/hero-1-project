@@ -12,6 +12,7 @@
 #include <linux/i2c-dev.h>
 #include <sys/ioctl.h>
 #include <fcntl.h>
+#include <wiringPi.h>
 #include "sense.h"
 
 using namespace std;
@@ -20,6 +21,10 @@ Sense::Sense()
 #ifdef DEBUG
 	cout << "Sense constructor called" << endl;
 #endif	
+	wiringPiSetup();
+	pinMode(7, GPIO_CLOCK);
+	gpioClockSet(7, 1000000) ;
+	
 
 	int tenBitAddress = 0;
 	int opResult = 0;
