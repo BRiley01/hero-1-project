@@ -106,6 +106,7 @@ void sendData()
   if(StatusReq) {
     byte resp[2] = {OPCODE_STATUS, sense};
     Wire.write(resp, 2);
+    StatusReq = false;
   }
   else
   {
