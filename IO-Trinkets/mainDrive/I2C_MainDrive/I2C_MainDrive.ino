@@ -52,14 +52,17 @@
 // change this to the number of steps on your motor
 #define STEPS 300
 
-enum STATUS {READY = 0x01, MOVING_NONBLOCKED = 0x02, MOVING = 0xF2, RECALIBRATING = 0xF3, FAULT = 0xFF};
+enum STATUS {READY = 0x01, MOVING_NONBLOCKED = 0x02, MOVING = 0xF2, RECALIBRATING = 0x03, FAULT = 0xFF};
 
 void clearOps();
 void addOp(byte code);
 
 typedef struct
 {
-  int a;
+  int Pos;
+  int Angle;
+  int DestPos;
+  int DestAngle;
 } t_WHEEL_MOVEMENT;
 
 // create an instance of the stepper class, specifying
@@ -67,12 +70,14 @@ typedef struct
 // attached to
 Stepper stepper(STEPS, 3, 4, 5, 6);
 
+void recalibrate();
+
 // the previous reading from the analog input
 int previous = 0;
 int i = 0;
 int newSpeed = 0;
 boolean nextOp;
-int wheelPos = 90;
+t_WHEEL_MOVEMENT Wheel;
 const int maxSteps = 1200; 
 volatile STATUS currStatus = READY;
 volatile boolean StatusReq = false;
@@ -91,6 +96,7 @@ void setup()
   DDRB = B00111111;
   PORTB = 0;
   nextOp = true;
+  addOp(OPCODE_RECALIBRATE);
    
   Wire.begin(SLAVE_ADDRESS);
   Wire.onReceive(receiveData);
@@ -108,11 +114,28 @@ void loop()
     case OPCODE_ABORT:
       PORTB = 0;
       return;    
+    case OPCODE_RECALIBRATE:
+      recalibrate();
+      break;    
     case OPCODE_WHEEL_POSTITION:
       nextOp = false;
     case OPCODE_WHEEL_POSTITION | NONBLOCKING_MASK:
-       break; 
+      
+      break; 
   } 
+}
+
+void recalibrate()
+{
+  //assume starting position is 90
+  stepper.step(300); // bring to 45
+  stepper.step(-900);  // bring to 180 (all right)
+  stepper.step(1200);  // bring to 0 (all left)
+  stepper.step(-600);  // bring to 90 (center)  
+  Wheel.Pos = 0;
+  Wheel.Angle = 90;
+  Wheel.DestPos = 0;
+  Wheel.DestAngle = 90;
 }
 
 boolean hasOp()
