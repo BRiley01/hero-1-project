@@ -16,7 +16,7 @@
 #include "speech.h"
 
 using namespace std;
-Speech::Speech(const char* db)
+Speech::Speech(const char* db, int I2C_Address) : Controller(I2C_Address)
 {
 #ifdef DEBUG
 	cout << "Speech constructor called" << endl;
@@ -31,24 +31,6 @@ Speech::Speech(const char* db)
 		sqlite3_close(_db) ;
 		throw result;
 	}
-
-	int tenBitAddress = 0;
-	int opResult = 0;
-
-	// Create a file descriptor for the I2C bus
-	_i2cHandle = open("/dev/i2c-1", O_RDWR); 
-
-	// I2C device is not 10-bit
-	opResult = ioctl(_i2cHandle, I2C_TENBIT, tenBitAddress);
-#ifdef DEBUG
-	cout << "Set I2C to non 10-bit mode result: " << opResult << endl;
-#endif		
-	
-	// set address of speech board to I2C
-	opResult = ioctl(_i2cHandle, I2C_SLAVE, I2C_SPEECH);
-#ifdef DEBUG
-	cout << "Set I2C speech board address result: " << opResult << endl;
-#endif		
 }
 
 Speech::~Speech()
@@ -75,7 +57,6 @@ vector<unsigned char> Speech::wordToPhonemeBytes(const char* word)
 	vector<unsigned char> bytes;
 	if(!_db) return bytes;
 	const char* pzTest;
-	unsigned char byte;
 	
 	sqlite3_stmt *stmt;
 	const char* sql = "select sp.code from CMU_Words w "
@@ -103,18 +84,6 @@ void Speech::toUpper(string& s) {
    }
 }
 
-bool Speech::sendOpCode(int opcode) 
-{
-	int opResult = 0;
-	opResult = write(&opcode, 1);
-	if(opResult != 1)
-	{ 
-#ifdef DEBUG
-		cout << "No ACK bit!\n";
-#endif			
-	}	
-}
-
 int Speech::Status(unsigned char* data, int len)
 {
 	unsigned char rxBuffer[5];	//	receive buffer
@@ -139,7 +108,7 @@ cout <<"AAAA";
 #ifdef DEBUG
 		cout << "Unexpected Response OPCODE: " << hex << (int)*data << dec << " len: " << len << "\n";
 #endif	
-		Abort();
+		Controller::Abort();
 cout <<"BBBBB";
 		return SPEECH_STATUS_FAULT;
 	}
@@ -147,52 +116,6 @@ cout <<"BBBBB";
 		cout << hex << (int)*(data+1);*/
 		
 	return *(data+1);
-}
-
-void Speech::Abort()
-{
-#ifdef DEBUG
-	cout << "ABORT CALLED\n";
-#endif
-	
-	if(!sendOpCode(SPEECH_OPCODE_ABORT))
-	{
-#ifdef DEBUG
-		cout << "No ACK bit!\n";
-#endif			
-	}
-}
-
-ssize_t Speech::read(void* buf, size_t count)
-{
-	int tries = 0;
-	int resp = -1;
-	while(tries < I2C_RETRY && resp != count)
-	{
-		resp = ::read(_i2cHandle, buf, count);
-		tries++;
-	}
-#ifdef DEBUG
-	if(tries == I2C_RETRY)
-		cout << "Max Read Attempt Exceeded!\n";
-#endif	
-	return resp;
-}
-		
-ssize_t Speech::write(void* buf, size_t count)
-{
-	int tries = 0;
-	int resp = -1;
-	while(tries < I2C_RETRY && resp != count)
-	{
-		resp = ::write(_i2cHandle, buf, count);
-		tries++;
-	}
-#ifdef DEBUG
-	if(tries == I2C_RETRY)
-		cout << "Max Write Attempt Exceeded!\n";
-#endif	
-	return resp;
 }
 
 
@@ -239,10 +162,11 @@ bool Speech::ClassicSpeech(unsigned char* memAddr)
 #ifdef DEBUG
 		cout << "No ACK bit!\n";
 #endif			
+		return false;
 	}
 	usleep(1000); //sleep for 1 millisecond
 	opResult = read(rxBuffer, 32);
-	
+	return true;
 }
 
 bool Speech::Say(const char* phrase)
@@ -265,10 +189,11 @@ bool Speech::Say(const char* phrase)
 		if(v_word.empty())
 		{
 #ifdef DEBUG
-			cout << "\tWord not found in dicitonary!" << endl;
+			cout << "\tWord not found in dictionary!" << endl;
 #endif		
 			for(int hold = 0; hold < 10; hold++)
 				v_word.push_back(0x00);//make prolonged EH sound
+			return false;
 		}
 		else
 		{
@@ -290,4 +215,5 @@ bool Speech::Say(const char* phrase)
 	cout << endl;
 #endif	
 	send(v_phrase);
+	return true;
 }

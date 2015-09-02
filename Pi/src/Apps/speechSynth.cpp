@@ -2,6 +2,7 @@
 #include "../speech/speech.h"
 
 #define BUFFER_SIZE 5
+#define I2C_SPEECH 0x04
 
 using namespace std;
 int main(int argc, char **argv)
@@ -11,7 +12,7 @@ int main(int argc, char **argv)
 	int status, lastStatus;
 	try
 	{
-		sp = new Speech("dictionary.db");		
+		sp = new Speech("dictionary.db", I2C_SPEECH);		
 	}
 	catch(int ex)
 	{
@@ -28,7 +29,7 @@ int main(int argc, char **argv)
 			sp->Say(phrase.c_str());
 		status = sp->Status(buffer, BUFFER_SIZE);
 		lastStatus = SPEECH_STATUS_READY;
-		while(status != SPEECH_STATUS_READY)
+		/*while(status != SPEECH_STATUS_READY)
 		{
 			if(status != lastStatus)
 			{
@@ -62,7 +63,7 @@ int main(int argc, char **argv)
 			}
 			//usleep(10000); //sleep for 1 millisecond
 			status = sp->Status(buffer, BUFFER_SIZE);
-		}
+		}*/
 	
 	}
 	delete sp;

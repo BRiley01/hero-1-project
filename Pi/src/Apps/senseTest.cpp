@@ -2,6 +2,7 @@
 #include "../sense/sense.h"
 
 #define BUFFER_SIZE 5
+#define I2C_SENSE 0x03
 
 using namespace std;
 int main(int argc, char **argv)
@@ -13,7 +14,7 @@ int main(int argc, char **argv)
 	int status, lastStatus;
 	try
 	{
-		sense = new Sense();		
+		sense = new Sense(I2C_SENSE);		
 	}
 	catch(int ex)
 	{

@@ -2,6 +2,7 @@
 #include "../speech/speech.h"
 
 #define BUFFER_SIZE 6
+#define I2C_SPEECH 0x04
 
 using namespace std;
 int main(int argc, char **argv)
@@ -11,7 +12,7 @@ int main(int argc, char **argv)
 	int status, lastStatus;
 	try
 	{
-		sp = new Speech("dictionary.db");		
+		sp = new Speech("dictionary.db", I2C_SPEECH);		
 	}
 	catch(int ex)
 	{
