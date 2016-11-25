@@ -52,6 +52,8 @@
 // change this to the number of steps on your motor
 #define STEPS 300
 
+#define NOOPS 0 //No expected operands
+
 enum STATUS {READY = 0x01, MOVING_NONBLOCKED = 0x02, MOVING = 0xF2, RECALIBRATING = 0x03, FAULT = 0xFF};
 
 void clearOps();
@@ -85,6 +87,8 @@ volatile byte buffer[BUFFER_SIZE];
 volatile byte* loopOp = &buffer[BUFFER_SIZE - 1];
 volatile byte* pCurrOp = buffer;
 volatile byte* pEndOp = buffer;
+byte recBuffer[10];
+int recOperands, expOperands;
 
 void setup()
 {
@@ -97,7 +101,8 @@ void setup()
   DDRB = B00111111;
   PORTB = 0;
   nextOp = true;
-  addOp(OPCODE_RECALIBRATE);
+  expOperands = NOOPS;
+  //addOp(OPCODE_RECALIBRATE);
    
   Wire.begin(SLAVE_ADDRESS);
   Wire.onReceive(receiveData);
@@ -108,6 +113,7 @@ void loop()
 {
   byte op;
   int steps;
+  int multiplier;
   if(!hasOp()) return;
   if(peekOp() == OPCODE_ABORT || nextOp)  
   op = getOp();
@@ -123,11 +129,12 @@ void loop()
       nextOp = false;
     case OPCODE_WHEEL_POSTITION | NONBLOCKING_MASK:
       //recalibrate();
+      multiplier = (getOp()==0)?-1:1;
       op = getOp();
       Serial.print("\t\tPosition Req: ");
       Serial.println(op);
-      steps = calcStep(op);  
-      //stepper.step(steps);
+      steps = calcStep(multiplier * op);  
+      stepper.step(steps);
       Wheel.Pos = Wheel.DestPos;
       Wheel.Angle = Wheel.DestAngle;
       nextOp = true;
@@ -207,49 +214,65 @@ void receiveData(int byteCount)
   {
     abort = false;
     b = Wire.read();
-    switch(b)
+    Serial.println(b);
+    if (recOperands == expOperands || expOperands == NOOPS)
+      LoadOpcode(b);
+    else
+      LoadOperand(b);
+    
+    if(recOperands >= expOperands || expOperands == NOOPS)
     {
-      case OPCODE_STATUS:
-        StatusReq = true;
-        break;
-      case OPCODE_WHEEL_POSTITION:
-        addOp(OPCODE_WHEEL_POSTITION);
-        addOp(Wire.read());
-        break;
-      case OPCODE_DRIVE:
-      case OPCODE_DRIVE | NONBLOCKING_MASK:        
-        chk = 0;
-        for(i = 0; i < 3; i++)
-        {
-          if(!Wire.available()) 
-          {
-            abort = true;            
-            break;
-          }
-          a[i] = Wire.read();
-          if(i < 3)
-            chk ^= a[i]; //chk is an XOR of the 3 proceeding bytes
-        }
-        if(abort || chk != a[3])
-          clearOps();
-        else
-        {
-          addOp(b);
-          for(i = 0; i < 2; i++)
-            addOp(a[i]);
-        }
-        break;
-      case OPCODE_RECALIBRATE:
-      case OPCODE_RECALIBRATE | NONBLOCKING_MASK:
-        addOp(b);
-        break;
-      case OPCODE_ABORT:
-        clearOps();
-        break;
-      default:
-        Serial.println("UNEXPECTED OPCODE Received!");
+      PushBuffer(expOperands);
+      expOperands = NOOPS;
     }
   }
+}
+
+void PushBuffer(int length)
+{
+  Serial.print("Pushing op string: ");
+  for(int i = 0; i<=length; i++)
+  {
+    Serial.print(recBuffer[i]);
+    Serial.print(" ");
+    addOp(recBuffer[i]); 
+  }
+  Serial.println();
+}
+
+void LoadOpcode(int b)
+{    
+  recOperands = 0;
+  recBuffer[0] = b;
+  expOperands = NOOPS;
+  switch(recBuffer[0])
+  {
+    case OPCODE_STATUS:
+      StatusReq = true;
+      expOperands = NOOPS;
+      break;
+    case OPCODE_WHEEL_POSTITION:
+      Serial.println("\tWheel Position...");
+      expOperands = 2; //direction(0:left;1:right), angle
+      break;
+    case OPCODE_DRIVE:
+    case OPCODE_DRIVE | NONBLOCKING_MASK:        
+      expOperands = 2; //speed, duration
+      break;
+    case OPCODE_RECALIBRATE:
+    case OPCODE_RECALIBRATE | NONBLOCKING_MASK:
+      break;
+    case OPCODE_ABORT:
+      clearOps();
+      break;
+    default:
+      Serial.println("UNEXPECTED OPCODE Received!");
+  }
+}
+
+void LoadOperand(int b)
+{
+   recBuffer[++recOperands] = b;    
 }
 	 
 // callback for sending data
