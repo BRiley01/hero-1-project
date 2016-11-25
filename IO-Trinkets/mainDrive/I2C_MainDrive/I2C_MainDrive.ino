@@ -90,6 +90,7 @@ void setup()
 {
   // set the speed of the motor to 30 RPMs
   stepper.setSpeed(30);
+  Serial.begin(9600);
   
   //stepper.step(1200);
   pinMode(A0, OUTPUT); 
@@ -106,6 +107,7 @@ void setup()
 void loop()
 {
   byte op;
+  int steps;
   if(!hasOp()) return;
   if(peekOp() == OPCODE_ABORT || nextOp)  
   op = getOp();
@@ -120,13 +122,29 @@ void loop()
     case OPCODE_WHEEL_POSTITION:
       nextOp = false;
     case OPCODE_WHEEL_POSTITION | NONBLOCKING_MASK:
-      
+      //recalibrate();
+      op = getOp();
+      Serial.print("\t\tPosition Req: ");
+      Serial.println(op);
+      steps = calcStep(op);  
+      //stepper.step(steps);
+      Wheel.Pos = Wheel.DestPos;
+      Wheel.Angle = Wheel.DestAngle;
+      nextOp = true;
       break; 
   } 
 }
 
+int calcStep(int angle)
+{
+  Wheel.DestPos = (angle * 6.666666);
+  Wheel.DestAngle = angle;
+  return Wheel.DestPos - Wheel.Pos;
+}
+
 void recalibrate()
 {
+  Serial.println("Calibrating...");
   //assume starting position is 90
   stepper.step(300); // bring to 45
   stepper.step(-900);  // bring to 180 (all right)
@@ -136,6 +154,7 @@ void recalibrate()
   Wheel.Angle = 90;
   Wheel.DestPos = 0;
   Wheel.DestAngle = 90;
+  Serial.println("Calibrated.");
 }
 
 boolean hasOp()
@@ -181,6 +200,9 @@ void receiveData(int byteCount)
   byte b;
   int i;
   boolean abort;
+  Serial.print("Data Received (");
+  Serial.print(byteCount);  
+  Serial.println(" byte[s])...");
   while(Wire.available())
   {
     abort = false;
@@ -224,6 +246,8 @@ void receiveData(int byteCount)
       case OPCODE_ABORT:
         clearOps();
         break;
+      default:
+        Serial.println("UNEXPECTED OPCODE Received!");
     }
   }
 }
