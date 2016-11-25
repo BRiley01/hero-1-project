@@ -14,9 +14,27 @@ int main(int argc, char **argv)
 	{
 		cout << "Enter command: ";
 		cin >> command;
-		if(command == '.')
-			break;
-			
+		switch(command)
+		{
+			case 0:
+				return 0;
+			case 1:
+				motor.Recalibrate();
+				break;
+			case 2:
+				if(!motor.Turn(90))
+					cout << "FAILED\n";
+				break;
+			case 3:
+				if(!motor.Turn(-90))
+					cout << "FAILED\n";
+				break;
+			case 4:
+				cin >> command;
+				if(!motor.Turn(command))
+					cout << "FAILED\n";
+				break;
+		}			
 	}
 	
 	return 0;

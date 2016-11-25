@@ -19,5 +19,10 @@ class DriveMotor: Controller
 	public:
 		DriveMotor(int I2C_Address);
 		~DriveMotor();
+		bool Recalibrate();
+		bool Drive(bool forward, int speed, long millis);
+		bool Turn(int angle);
+		
+		
 		int Status(unsigned char* data, int len);
 };

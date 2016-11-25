@@ -16,6 +16,9 @@
 #include "drive.h"
 
 #define OPCODE_STATUS 0x00
+#define OPCODE_WHEEL_POSTITION 0x01
+#define OPCODE_DRIVE 0x02
+#define OPCODE_RECALIBRATE 0x03
 
 using namespace std;
 DriveMotor::DriveMotor(int I2C_Address) : Controller(I2C_Address)
@@ -30,6 +33,37 @@ DriveMotor::~DriveMotor()
 #ifdef DEBUG
 	cout << "DriveMotor deconstructor called" << endl;
 #endif	
+}
+
+bool DriveMotor::Recalibrate()
+{
+	if(!sendOpCode(OPCODE_RECALIBRATE))
+	{
+#ifdef DEBUG
+		cout << "Status request failed\n";
+#endif	
+		return false;
+	}
+	return true;
+}
+
+bool DriveMotor::Drive(bool forward, int speed, long millis)
+{
+}
+
+bool DriveMotor::Turn(int angle)
+{
+	char buff[2];
+	if(!sendOpCode(OPCODE_WHEEL_POSTITION))
+	{
+#ifdef DEBUG
+		cout << "Status request failed\n";
+#endif	
+		return false;
+	}
+	buff[0] = (angle < 0)?0:1;
+	buff[1] = abs(angle);
+	return write(buff, 2) == 2;
 }
 
 int DriveMotor::Status(unsigned char* data, int len)
