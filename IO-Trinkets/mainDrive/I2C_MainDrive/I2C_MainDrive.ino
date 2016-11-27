@@ -45,16 +45,13 @@
 
 // change this to the number of steps on your motor
 #define STEPS 300
-#define NORECAL -1
 #define MAX_OPERANDS 2
 
 typedef struct
 {
-  byte DriveDirection;
-  byte DriveSpeed;
-  byte WheelAngle;
-  byte WheelDestAngle;
-} t_STATUS;
+  int Forward;
+  int Speed;
+} t_DRIVE_INFO;
 
 typedef struct
 {
@@ -64,27 +61,41 @@ typedef struct
   int DestAngle;
 } t_WHEEL_MOVEMENT;
 
+typedef struct
+{  
+  int Recalibrating; //this it to force a byte aligned struct, otherwise could have been bool
+  t_DRIVE_INFO Drive; 
+  t_WHEEL_MOVEMENT Wheel;
+} t_STATUS;
+
 // create an instance of the stepper class, specifying
 // the number of steps of the motor and the pins it's
 // attached to
 Stepper stepper(STEPS, 3, 4, 5, 6);
 
 // the previous reading from the analog input
-t_WHEEL_MOVEMENT Wheel;
+t_STATUS Status;
+t_WHEEL_MOVEMENT* pWheel = &Status.Wheel;
+t_DRIVE_INFO* pDrive = &Status.Drive;
 volatile boolean StatusReq = false;
 volatile boolean commandLoaded = false;
 byte recBuffer[10];
 int recOperands, expOperands;
-int recalibrateStep = NORECAL;
 const boolean EnableSerial = false;
+volatile int sentBytes = 0;
 
 void setup()
 {
   // set the speed of the motor to 30 RPMs
   stepper.setSpeed(30);
   if(EnableSerial)
+  {
     Serial.begin(9600);
-  
+    Serial.println(sizeof(t_STATUS));
+    Serial.println(sizeof(t_DRIVE_INFO));
+    Serial.println(sizeof(t_WHEEL_MOVEMENT));
+  }
+
   //stepper.step(1200);
   pinMode(A0, OUTPUT); // Main drive power
   pinMode(A1, OUTPUT); // Main drive direction
@@ -94,7 +105,7 @@ void setup()
   digitalWrite(A0, LOW); // Default to off
   digitalWrite(A1, LOW); // Default to forward
 
-  memset(&Wheel,0,sizeof(Wheel)); //Start off assuming 0
+  memset(&Status,0,sizeof(Status)); 
        
   Wire.begin(SLAVE_ADDRESS);
   Wire.onReceive(receiveData);
@@ -104,6 +115,12 @@ void setup()
 void loop()
 {
   int step;
+  if(sentBytes != 0)
+  {
+    Serial.println(sentBytes);
+    sentBytes = 0;
+  }
+  
   if(commandLoaded)
   {
     if(EnableSerial)
@@ -112,56 +129,58 @@ void loop()
     commandLoaded = false;
   }
   
-  if(recalibrateStep == NORECAL)
+  if(!Status.Recalibrating)
   {
-    if(Wheel.Pos != Wheel.DestPos)
+    if(pWheel->Pos != pWheel->DestPos)
     {    
       step = stepWheel();
       stepper.step(step);
-      if(Wheel.Pos == Wheel.DestAngle)
-        Wheel.DestAngle = Wheel.Angle;    
+      if(pWheel->Pos == pWheel->DestPos)
+        pWheel->DestAngle = pWheel->Angle;    
+
+      if(EnableSerial) PrintStatus();
     }
   }
 }
 
 int stepWheel()
 {
-  if(Wheel.DestPos > Wheel.Pos)
+  if(pWheel->DestPos > pWheel->Pos)
   {
-    Wheel.Pos++;
-    Wheel.Angle = Wheel.Pos / 6.666666;
+    pWheel->Pos++;
+    pWheel->Angle = ceil(pWheel->Pos / 6.666666);
     return 1; 
   }
-  else if(Wheel.DestPos < Wheel.Pos)
+  else if(pWheel->DestPos < pWheel->Pos)
   {
-    Wheel.Pos--;
-    Wheel.Angle = Wheel.Pos / 6.666666;
+    pWheel->Pos--;
+    pWheel->Angle = ceil(pWheel->Pos / 6.666666);
     return -1; 
   }
 }
 
 int calcStep(int angle)
 {
-  Wheel.DestPos = (angle * 6.666666);
-  Wheel.DestAngle = angle;
-  return Wheel.DestPos - Wheel.Pos;
+  pWheel->DestPos = (angle * 6.666666);
+  pWheel->DestAngle = angle;
+  return pWheel->DestPos - pWheel->Pos;
 }
 
 void recalibrate()
 {
-  recalibrateStep = 1;
+  Status.Recalibrating = true;
   if(EnableSerial) Serial.println("Calibrating...");
   //assume starting position is 90
   stepper.step(300); // bring to 45
   stepper.step(-900);  // bring to 180 (all right)
   stepper.step(1200);  // bring to 0 (all left)
   stepper.step(-600);  // bring to 90 (center)  
-  Wheel.Pos = 0;
-  Wheel.Angle = 90;
-  Wheel.DestPos = 0;
-  Wheel.DestAngle = 90;
+  pWheel->Pos = 0;
+  pWheel->Angle = 90;
+  pWheel->DestPos = 0;
+  pWheel->DestAngle = 90;
   if(EnableSerial) Serial.println("Calibrated.");
-  recalibrateStep = NORECAL;
+  Status.Recalibrating = false;
 }
 
 void Execute()
@@ -186,13 +205,14 @@ void Execute()
 void Abort()
 {
   digitalWrite(A0, LOW);
-  Wheel.DestPos = Wheel.Pos;
-  Wheel.DestAngle = Wheel.Angle;
+  pWheel->DestPos = pWheel->Pos;
+  pWheel->DestAngle = pWheel->Angle;
 }
 
 void DriveRequest(bool forward, int reqSpeed)
 {
   digitalWrite(A1, forward?LOW:HIGH);
+  pDrive->Forward = forward;
   if(EnableSerial) Serial.print("Drive: " );
   if(reqSpeed == 0)
   {
@@ -211,6 +231,7 @@ void DriveRequest(bool forward, int reqSpeed)
     }
     digitalWrite(A0, HIGH);
   }
+  pDrive->Speed = reqSpeed;
 }
 
 void WheelPositionRequest(int angle)
@@ -230,12 +251,12 @@ void receiveData(int byteCount)
   byte data[1 + MAX_OPERANDS]; //opp + operands
   boolean abortReq = false;
   int i = 0;
-  if(EnableSerial)
+  /*if(EnableSerial)
   {
     Serial.print("Data Received (");
     Serial.print(byteCount);  
     Serial.println(" byte[s])...");
-  }
+  }*/
   while(Wire.available())
   {    
     b = Wire.read();
@@ -248,7 +269,7 @@ void receiveData(int byteCount)
     if(EnableSerial) Serial.println("unexpected packet");
     return;
   }
-  else if(commandLoaded)
+  else if(commandLoaded && data[0] != OPCODE_STATUS)
   {
     if(EnableSerial) Serial.println("currently processing command");
     return;
@@ -270,7 +291,7 @@ void receiveData(int byteCount)
     Serial.print(i+1);
   }
 
-  if(recOperands == expOperands) commandLoaded = true;
+  if(recOperands == expOperands && recBuffer[0] != OPCODE_STATUS) commandLoaded = true;
 }
 
 void LoadOpcode(int b)
@@ -301,6 +322,23 @@ void LoadOpcode(int b)
   }
 }
 
+void PrintStatus()
+{
+  Serial.print(Status.Recalibrating);
+  Serial.print(" ");
+  Serial.print(Status.Wheel.Pos);
+  Serial.print(" ");
+  Serial.print(Status.Wheel.Angle);
+  Serial.print(" ");
+  Serial.print(Status.Wheel.DestPos);
+  Serial.print(" ");
+  Serial.print(Status.Wheel.DestAngle);
+  Serial.print(" ");
+  Serial.print(Status.Drive.Forward);
+  Serial.print(" ");
+  Serial.println(Status.Drive.Speed);
+}
+
 void LoadOperand(int b)
 {
    recBuffer[++recOperands] = b;    
@@ -308,10 +346,9 @@ void LoadOperand(int b)
 	 
 // callback for sending data
 void sendData()
-{
+{  
   if(StatusReq) {
-    /*byte resp[2] = {OPCODE_STATUS, currStatus};
-    Wire.write(resp, 2);
-    StatusReq = false;*/
+    sentBytes = Wire.write((const char*)&Status, sizeof(Status));
+    StatusReq = false;
   }
 }
