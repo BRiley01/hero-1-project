@@ -13,6 +13,28 @@
 #define DRIVE_STATUS_MOVING 0xF2
 #define DRIVE_STATUS_RECALIBRATING 0x03
 #define DRIVE_STATUS_FAULT 0xFF
+#define byte unsigned char
+
+typedef struct
+{
+  short Forward;
+  short Speed;
+} t_DRIVE_INFO;
+
+typedef struct
+{
+  short Pos;
+  short Angle;
+  short DestPos;
+  short DestAngle;
+} t_WHEEL_MOVEMENT;
+
+typedef struct
+{  
+  short Recalibrating;
+  t_DRIVE_INFO Drive; 
+  t_WHEEL_MOVEMENT Wheel;
+} t_DRIVE_STATUS;
 
 class DriveMotor: Controller
 {
@@ -20,9 +42,9 @@ class DriveMotor: Controller
 		DriveMotor(int I2C_Address);
 		~DriveMotor();
 		bool Recalibrate();
-		bool Drive(bool forward, int speed, long millis);
+		bool Drive(bool forward, int speed);
 		bool Turn(int angle);
 		
 		
-		int Status(unsigned char* data, int len);
+		t_DRIVE_STATUS Status();
 };

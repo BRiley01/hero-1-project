@@ -5,6 +5,7 @@
 #include <sstream>
 #include <iterator>
 #include <vector>
+#include <stdexcept>
 #include <sqlite3.h>
 #include <string.h>
 #include <stdlib.h>
@@ -47,53 +48,38 @@ bool DriveMotor::Recalibrate()
 	return true;
 }
 
-bool DriveMotor::Drive(bool forward, int speed, long millis)
+bool DriveMotor::Drive(bool forward, int speed)
 {
+	char buff[3];
+	buff[0] = OPCODE_DRIVE;
+	buff[1] = forward;
+	buff[2] = speed;
+	return write(buff, 3) == 3;
 }
 
 bool DriveMotor::Turn(int angle)
 {
-	char buff[2];
-	if(!sendOpCode(OPCODE_WHEEL_POSTITION))
-	{
-#ifdef DEBUG
-		cout << "Status request failed\n";
-#endif	
-		return false;
-	}
-	buff[0] = (angle < 0)?0:1;
-	buff[1] = abs(angle);
+	char buff[3];
+	buff[0] = OPCODE_WHEEL_POSTITION;
+	buff[1] = angle + 90;
 	return write(buff, 2) == 2;
 }
 
-int DriveMotor::Status(unsigned char* data, int len)
+t_DRIVE_STATUS DriveMotor::Status()
 {
-	unsigned char rxBuffer[5];	//	receive buffer
-	if(!data || len == 0)
-	{
-		data = rxBuffer;
-		len = 5;
-	}
-	memset(data, 0, sizeof(unsigned char) * len);
+	t_DRIVE_STATUS result;
+	memset(&result, 0, sizeof(result));
 	if(!sendOpCode(OPCODE_STATUS))
+		throw runtime_error("Status request failed: error sending opcode");
+	
+	if(read(&result, sizeof(result)) != sizeof(result))
 	{
-#ifdef DEBUG
-		cout << "Status request failed\n";
-#endif	
-		return STATUS_FAULT;
-	}
-	read(data, len);
-	if(*data != OPCODE_STATUS)
-	{
-#ifdef DEBUG
-		cout << "Unexpected Response OPCODE: " << hex << (int)*data << dec << " len: " << len << "\n";
-#endif	
 		Abort();
-		return STATUS_FAULT;
+	
+		throw runtime_error("Status request failed: unexpected response!");
 	}
-	/*else
-		cout << hex << (int)*(data+1);*/
-		
-	return *(data+1);
+	//result.Wheel.Angle -= 90;
+	//result.Wheel.DestAngle -= 90;
+	return result;
 }
 
