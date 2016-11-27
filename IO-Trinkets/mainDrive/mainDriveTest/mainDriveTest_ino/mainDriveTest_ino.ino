@@ -24,6 +24,7 @@ void setup()
   
   //stepper.step(1200);
   pinMode(A0, OUTPUT); 
+  pinMode(A1, OUTPUT); 
   DDRB = B00111111;
   PORTB = 0;
   //digitalWrite(A0, HIGH);
@@ -32,18 +33,21 @@ void setup()
   Wire.begin(SLAVE_ADDRESS);
   /*Wire.onReceive(receiveData);
   Wire.onRequest(sendData);*/
+  digitalWrite(A0, LOW);
+  digitalWrite(A1, LOW);
 }
 
 void loop()
 {
+  Serial.println(newSpeed);
   PORTB = newSpeed;
   newSpeed++;
-  newSpeed %= 64;
-  delay(1000);
-  stepper.step(600);
-  delay(1000);
-  digitalWrite(A0, HIGH);
-  stepper.step(-600);  
-  delay(1000);
-  digitalWrite(A0, LOW);
+  //newSpeed %= 64;
+  delay(500);
+  //stepper.step(600);
+  //delay(1000);
+  //digitalWrite(A0, HIGH);
+  //stepper.step(-600);  
+  //delay(1000);
+  //digitalWrite(A0, LOW);
 }

@@ -11,21 +11,19 @@
         STATUS_MOVING 0xF2
         STATUS_RECALIBRATING 0xF3
         STATUS_FAULT 0xFF
-    0x01/0xF1 (blocking/non-blocking): WHEEL POSITION
+    0x01: WHEEL POSITION
       OPERAND:
-        0 - 180 where 90 = straight
-    0x02/0xF2 (blocking/non-blocking): DRIVE
+        2 BYTES
+          From MSB:
+            Direction (0:left; 1:right)
+            Angle: 0 - 90 where 0 = straight
+    0x02: DRIVE
       OPERAND:
-        4 BYTES
-         first:
-               LS 6 bits = speed
-               bit 7 - direction (0 forward, 1 reverse)
-         second:
-               duration most significant byte
-         third:
-               duration least significant byte
-         fourth:
-               check byte (XOR of first 3 bytes)
+        2 BYTES
+         From MSB: 
+          Direction (byte)
+          Speed (byte)
+         
     0x03: RECALIBRATE
     ------
     0xFE: ABORT
@@ -40,24 +38,18 @@
 
 #define SLAVE_ADDRESS 0x05
 
-#define NONBLOCKING_MASK 0xF0
 #define OPCODE_STATUS 0x00
-#define OPCODE_WHEEL_POSTITION 0x01
+#define OPCODE_WHEEL_POSITION 0x01
 #define OPCODE_DRIVE 0x02
 #define OPCODE_RECALIBRATE 0x03
 #define OPCODE_ABORT 0xFE
 
-#define BUFFER_SIZE 255
-
 // change this to the number of steps on your motor
 #define STEPS 300
+#define NORECAL -1
+#define MAX_OPERANDS 2
 
-#define NOOPS 0 //No expected operands
-
-enum STATUS {READY = 0x01, MOVING_NONBLOCKED = 0x02, MOVING = 0xF2, RECALIBRATING = 0x03, FAULT = 0xFF};
-
-void clearOps();
-void addOp(byte code);
+enum STATUS {READY = 0x01, MOVING = 0x02, RECALIBRATING = 0x03, FAULT = 0xFF};
 
 typedef struct
 {
@@ -72,38 +64,32 @@ typedef struct
 // attached to
 Stepper stepper(STEPS, 3, 4, 5, 6);
 
-void recalibrate();
-
 // the previous reading from the analog input
-int previous = 0;
-int i = 0;
-int newSpeed = 0;
-boolean nextOp;
 t_WHEEL_MOVEMENT Wheel;
-const int maxSteps = 1200; 
 volatile STATUS currStatus = READY;
 volatile boolean StatusReq = false;
-volatile byte buffer[BUFFER_SIZE];
-volatile byte* loopOp = &buffer[BUFFER_SIZE - 1];
-volatile byte* pCurrOp = buffer;
-volatile byte* pEndOp = buffer;
+volatile boolean commandLoaded = false;
 byte recBuffer[10];
 int recOperands, expOperands;
+int recalibrateStep = NORECAL;
+const boolean EnableSerial = false;
 
 void setup()
 {
   // set the speed of the motor to 30 RPMs
   stepper.setSpeed(30);
-  Serial.begin(9600);
+  if(EnableSerial)
+    Serial.begin(9600);
   
   //stepper.step(1200);
-  pinMode(A0, OUTPUT); 
-  DDRB = B00111111;
+  pinMode(A0, OUTPUT); // Main drive power
+  pinMode(A1, OUTPUT); // Main drive direction
+  DDRB = DDRB | B00111111;
   PORTB = 0;
-  nextOp = true;
-  expOperands = NOOPS;
-  //addOp(OPCODE_RECALIBRATE);
-   
+  expOperands = 0;
+  digitalWrite(A0, LOW); // Default to off
+  digitalWrite(A1, LOW); // Default to forward
+     
   Wire.begin(SLAVE_ADDRESS);
   Wire.onReceive(receiveData);
   Wire.onRequest(sendData);
@@ -111,35 +97,41 @@ void setup()
 
 void loop()
 {
-  byte op;
-  int steps;
-  int multiplier;
-  if(!hasOp()) return;
-  if(peekOp() == OPCODE_ABORT || nextOp)  
-  op = getOp();
-  switch(op)
+  int step;
+  if(commandLoaded)
   {
-    case OPCODE_ABORT:
-      PORTB = 0;
-      return;    
-    case OPCODE_RECALIBRATE:
-      recalibrate();
-      break;    
-    case OPCODE_WHEEL_POSTITION:
-      nextOp = false;
-    case OPCODE_WHEEL_POSTITION | NONBLOCKING_MASK:
-      //recalibrate();
-      multiplier = (getOp()==0)?-1:1;
-      op = getOp();
-      Serial.print("\t\tPosition Req: ");
-      Serial.println(op);
-      steps = calcStep(multiplier * op);  
-      stepper.step(steps);
-      Wheel.Pos = Wheel.DestPos;
-      Wheel.Angle = Wheel.DestAngle;
-      nextOp = true;
-      break; 
-  } 
+    if(EnableSerial)
+      Serial.println("Command loaded");
+    Execute();
+    commandLoaded = false;
+  }
+  
+  if(recalibrateStep == NORECAL)
+  {
+    if(Wheel.Pos != Wheel.DestPos)
+    {    
+      step = stepWheel();
+      stepper.step(step);
+      if(Wheel.Pos == Wheel.DestAngle)
+        Wheel.DestAngle = Wheel.Angle;    
+    }
+  }
+}
+
+int stepWheel()
+{
+  if(Wheel.DestPos > Wheel.Pos)
+  {
+    Wheel.Pos++;
+    Wheel.Angle = Wheel.Pos / 6.666666;
+    return 1; 
+  }
+  else if(Wheel.DestPos < Wheel.Pos)
+  {
+    Wheel.Pos--;
+    Wheel.Angle = Wheel.Pos / 6.666666;
+    return -1; 
+  }
 }
 
 int calcStep(int angle)
@@ -151,7 +143,8 @@ int calcStep(int angle)
 
 void recalibrate()
 {
-  Serial.println("Calibrating...");
+  recalibrateStep = 1;
+  if(EnableSerial) Serial.println("Calibrating...");
   //assume starting position is 90
   stepper.step(300); // bring to 45
   stepper.step(-900);  // bring to 180 (all right)
@@ -161,112 +154,146 @@ void recalibrate()
   Wheel.Angle = 90;
   Wheel.DestPos = 0;
   Wheel.DestAngle = 90;
-  Serial.println("Calibrated.");
+  if(EnableSerial) Serial.println("Calibrated.");
+  recalibrateStep = NORECAL;
 }
 
-boolean hasOp()
+void Execute()
 {
-   return pCurrOp != pEndOp;
+  int multiplier;
+  switch(recBuffer[0])
+  {
+    case OPCODE_WHEEL_POSITION:
+      multiplier = (recBuffer[1]==0)?-1:1;
+      WheelPositionRequest(multiplier * recBuffer[2]);
+      break;    
+    case OPCODE_DRIVE:
+      DriveRequest(recBuffer[1],recBuffer[2]);
+      break;
+    case OPCODE_RECALIBRATE:
+      recalibrate();
+      break;
+    case OPCODE_ABORT:
+      Abort();
+      break;
+  }
 }
 
-byte getOp()
+void Abort()
 {
-  pCurrOp++;
-  if(pCurrOp == loopOp)
-    pCurrOp = buffer;
-  return *pCurrOp; 
+  digitalWrite(A0, LOW);
+  Wheel.DestPos = Wheel.Pos;
+  Wheel.DestAngle = Wheel.Angle;
 }
 
-byte peekOp()
+void DriveRequest(bool forward, int reqSpeed)
 {
-  if(pCurrOp + 1 == loopOp)
-    return *buffer;
-  return *(pCurrOp+1);
+  digitalWrite(A1, forward?LOW:HIGH);
+  if(EnableSerial) Serial.print("Drive: " );
+  if(reqSpeed == 0)
+  {
+    if(EnableSerial) Serial.println("STOP");
+    digitalWrite(A0, LOW);
+  }
+  else 
+  {
+    if(EnableSerial)
+    {
+      if(forward)
+        Serial.print("FORWARD - ");
+      else
+        Serial.print("REVERSE - ");
+      Serial.println(reqSpeed);
+    }
+    digitalWrite(A0, HIGH);
+  }
 }
 
-void addOp(const byte code)
+void WheelPositionRequest(int angle)
 {
-  pEndOp++;
-  if(pEndOp == loopOp)
-    pEndOp = buffer;
-  *pEndOp = code; 
-}
-
-void clearOps()
-{
-   pCurrOp = buffer;
-   pEndOp = buffer; 
-   *pCurrOp = OPCODE_ABORT;
+  if(EnableSerial)
+  {
+    Serial.print("\t\tPosition Req: ");
+    Serial.println(angle);
+  }
+  calcStep(angle);
 }
 
 // callback for received data
 void receiveData(int byteCount)
 {
-  byte a[4];
-  byte chk;
   byte b;
-  int i;
-  boolean abort;
-  Serial.print("Data Received (");
-  Serial.print(byteCount);  
-  Serial.println(" byte[s])...");
-  while(Wire.available())
+  byte data[1 + MAX_OPERANDS]; //opp + operands
+  boolean abortReq = false;
+  int i = 0;
+  if(EnableSerial)
   {
-    abort = false;
+    Serial.print("Data Received (");
+    Serial.print(byteCount);  
+    Serial.println(" byte[s])...");
+  }
+  while(Wire.available())
+  {    
     b = Wire.read();
-    Serial.println(b);
-    if (recOperands == expOperands || expOperands == NOOPS)
-      LoadOpcode(b);
-    else
-      LoadOperand(b);
-    
-    if(recOperands >= expOperands || expOperands == NOOPS)
+    if(i <= MAX_OPERANDS)
+      data[i] = b;
+    ++i;
+  }
+  if(i > 1 + MAX_OPERANDS)
+  {
+    if(EnableSerial) Serial.println("unexpected packet");
+    return;
+  }
+  else if(commandLoaded)
+  {
+    if(EnableSerial) Serial.println("currently processing command");
+    return;
+  }
+  
+  LoadOpcode(data[0]);
+  if(i-1 == expOperands) //Account for opcode
+  { 
+    for(i=1; i<=expOperands; i++)
     {
-      PushBuffer(expOperands);
-      expOperands = NOOPS;
+      LoadOperand(data[i]);
     }
   }
-}
-
-void PushBuffer(int length)
-{
-  Serial.print("Pushing op string: ");
-  for(int i = 0; i<=length; i++)
+  else if(EnableSerial)
   {
-    Serial.print(recBuffer[i]);
-    Serial.print(" ");
-    addOp(recBuffer[i]); 
+    Serial.print("unexpected operand coun - exp:");
+    Serial.print(expOperands);
+    Serial.print("; recv:");
+    Serial.print(i+1);
   }
-  Serial.println();
+
+  if(recOperands == expOperands) commandLoaded = true;
 }
 
 void LoadOpcode(int b)
 {    
   recOperands = 0;
   recBuffer[0] = b;
-  expOperands = NOOPS;
+  expOperands = 0;
   switch(recBuffer[0])
   {
     case OPCODE_STATUS:
       StatusReq = true;
-      expOperands = NOOPS;
+      expOperands = 0;
       break;
-    case OPCODE_WHEEL_POSTITION:
-      Serial.println("\tWheel Position...");
+    case OPCODE_WHEEL_POSITION:
+      if(EnableSerial) Serial.println("\tWheel Position...");
       expOperands = 2; //direction(0:left;1:right), angle
       break;
-    case OPCODE_DRIVE:
-    case OPCODE_DRIVE | NONBLOCKING_MASK:        
-      expOperands = 2; //speed, duration
+    case OPCODE_DRIVE:        
+      expOperands = 2; //reverse(0,1), speed
       break;
     case OPCODE_RECALIBRATE:
-    case OPCODE_RECALIBRATE | NONBLOCKING_MASK:
       break;
     case OPCODE_ABORT:
-      clearOps();
+      digitalWrite(A0, LOW); //Stop main drive as soon as we get this
       break;
     default:
-      Serial.println("UNEXPECTED OPCODE Received!");
+      if(EnableSerial) Serial.println("UNEXPECTED OPCODE Received!");
   }
 }
 
