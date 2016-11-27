@@ -13,10 +13,9 @@
         STATUS_FAULT 0xFF
     0x01: WHEEL POSITION
       OPERAND:
-        2 BYTES
+        1 BYTE
           From MSB:
-            Direction (0:left; 1:right)
-            Angle: 0 - 90 where 0 = straight
+            Angle: 0 - 180 where 0 = full left
     0x02: DRIVE
       OPERAND:
         2 BYTES
@@ -49,7 +48,13 @@
 #define NORECAL -1
 #define MAX_OPERANDS 2
 
-enum STATUS {READY = 0x01, MOVING = 0x02, RECALIBRATING = 0x03, FAULT = 0xFF};
+typedef struct
+{
+  byte DriveDirection;
+  byte DriveSpeed;
+  byte WheelAngle;
+  byte WheelDestAngle;
+} t_STATUS;
 
 typedef struct
 {
@@ -66,7 +71,6 @@ Stepper stepper(STEPS, 3, 4, 5, 6);
 
 // the previous reading from the analog input
 t_WHEEL_MOVEMENT Wheel;
-volatile STATUS currStatus = READY;
 volatile boolean StatusReq = false;
 volatile boolean commandLoaded = false;
 byte recBuffer[10];
@@ -89,7 +93,9 @@ void setup()
   expOperands = 0;
   digitalWrite(A0, LOW); // Default to off
   digitalWrite(A1, LOW); // Default to forward
-     
+
+  memset(&Wheel,0,sizeof(Wheel)); //Start off assuming 0
+       
   Wire.begin(SLAVE_ADDRESS);
   Wire.onReceive(receiveData);
   Wire.onRequest(sendData);
@@ -160,12 +166,10 @@ void recalibrate()
 
 void Execute()
 {
-  int multiplier;
   switch(recBuffer[0])
   {
     case OPCODE_WHEEL_POSITION:
-      multiplier = (recBuffer[1]==0)?-1:1;
-      WheelPositionRequest(multiplier * recBuffer[2]);
+      WheelPositionRequest(recBuffer[1] - 90); //Convert (0 - 180) to (-90 - 90)
       break;    
     case OPCODE_DRIVE:
       DriveRequest(recBuffer[1],recBuffer[2]);
@@ -282,7 +286,7 @@ void LoadOpcode(int b)
       break;
     case OPCODE_WHEEL_POSITION:
       if(EnableSerial) Serial.println("\tWheel Position...");
-      expOperands = 2; //direction(0:left;1:right), angle
+      expOperands = 1; //angle (0 - 180 where 0 = full left)
       break;
     case OPCODE_DRIVE:        
       expOperands = 2; //reverse(0,1), speed
@@ -306,8 +310,8 @@ void LoadOperand(int b)
 void sendData()
 {
   if(StatusReq) {
-    byte resp[2] = {OPCODE_STATUS, currStatus};
+    /*byte resp[2] = {OPCODE_STATUS, currStatus};
     Wire.write(resp, 2);
-    StatusReq = false;
+    StatusReq = false;*/
   }
 }
