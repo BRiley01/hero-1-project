@@ -12,16 +12,17 @@
         STATUS_RECALIBRATING 0xF3
         STATUS_FAULT 0xFF
     0x01: WHEEL POSITION
-      OPERAND:
+      OPERAND:EnableSerial
         1 BYTE
           From MSB:
             Angle: 0 - 180 where 0 = full left
     0x02: DRIVE
       OPERAND:
-        2 BYTES
+        6 BYTES
          From MSB: 
           Direction (byte)
-          Speed (byte)
+          Speed (byte)     
+          Distance (4 bytes)     
          
     0x03: RECALIBRATE
     ------
@@ -43,14 +44,18 @@
 #define OPCODE_RECALIBRATE 0x03
 #define OPCODE_ABORT 0xFE
 
+#define DISC_PIN A2
+
 // change this to the number of steps on your motor
 #define STEPS 300
-#define MAX_OPERANDS 2
+#define MAX_OPERANDS 6
 
 typedef struct
 {
   int Forward;
   int Speed;
+  unsigned long Distance;
+  unsigned long DestDistance;
 } t_DRIVE_INFO;
 
 typedef struct
@@ -81,8 +86,9 @@ volatile boolean StatusReq = false;
 volatile boolean commandLoaded = false;
 byte recBuffer[10];
 int recOperands, expOperands;
-const boolean EnableSerial = false;
+const boolean EnableSerial = true;
 volatile int sentBytes = 0;
+bool Encoder = HIGH;
 
 void setup()
 {
@@ -97,6 +103,7 @@ void setup()
   }
 
   //stepper.step(1200);
+  pinMode(DISC_PIN, INPUT);
   pinMode(A0, OUTPUT); // Main drive power
   pinMode(A1, OUTPUT); // Main drive direction
   DDRB = DDRB | B00111111;
@@ -115,9 +122,32 @@ void setup()
 void loop()
 {
   int step;
+
+  int val = analogRead(DISC_PIN);  // read the input pin
+  float volts = (val * 5.0) / 1023.0;
+
+  Serial.print(pDrive->Distance);
+  Serial.print(" of ");
+  Serial.println(pDrive->DestDistance);
+  
+  if(Encoder == HIGH && volts < .5)
+  {
+    Encoder = LOW;
+    pDrive->Distance++;
+    if(pDrive->Distance >= pDrive->DestDistance && pDrive->DestDistance != 0)
+      DriveRequest(0, 0, 0);  
+  }
+  else if(Encoder == LOW && volts > 1)
+    Encoder = HIGH;
+    
+  //if(EnableSerial)
+  //  Serial.println(volts);
+  
+  
   if(sentBytes != 0)
   {
-    Serial.println(sentBytes);
+    if(EnableSerial)
+      Serial.println(sentBytes);
     sentBytes = 0;
   }
   
@@ -183,6 +213,11 @@ void recalibrate()
   Status.Recalibrating = false;
 }
 
+unsigned long BytesToLong(byte a, byte b, byte c, byte d)
+{
+  return ((unsigned long)a << 24) | ((unsigned long)b << 16) | ((unsigned long)c << 8l) | (unsigned long)d;
+}
+
 void Execute()
 {
   switch(recBuffer[0])
@@ -191,7 +226,18 @@ void Execute()
       WheelPositionRequest(recBuffer[1] - 90); //Convert (0 - 180) to (-90 - 90)
       break;    
     case OPCODE_DRIVE:
-      DriveRequest(recBuffer[1],recBuffer[2]);
+      if(EnableSerial)
+      {
+        Serial.print(recBuffer[3]);
+        Serial.print(":");
+        Serial.print(recBuffer[4]);
+        Serial.print(":");
+        Serial.print(recBuffer[5]);
+        Serial.print(":");
+        Serial.println(recBuffer[6]);
+      }
+      unsigned long distance = BytesToLong(recBuffer[3], recBuffer[4], recBuffer[5], recBuffer[6]);
+      DriveRequest(recBuffer[1],recBuffer[2], distance);
       break;
     case OPCODE_RECALIBRATE:
       recalibrate();
@@ -209,8 +255,14 @@ void Abort()
   pWheel->DestAngle = pWheel->Angle;
 }
 
-void DriveRequest(bool forward, int reqSpeed)
+void DriveRequest(bool forward, int reqSpeed, unsigned long reqDistance)
 {
+  Serial.print("forward: ");
+  Serial.print(forward);
+  Serial.print(";reqSpeed: ");
+  Serial.print(reqSpeed);
+  Serial.print(";reqDistance: ");
+  Serial.print(reqDistance);
   digitalWrite(A1, forward?LOW:HIGH);
   pDrive->Forward = forward;
   if(EnableSerial) Serial.print("Drive: " );
@@ -229,9 +281,12 @@ void DriveRequest(bool forward, int reqSpeed)
         Serial.print("REVERSE - ");
       Serial.println(reqSpeed);
     }
+    PORTB = reqSpeed;
     digitalWrite(A0, HIGH);
   }
   pDrive->Speed = reqSpeed;
+  pDrive->Distance = 0;
+  pDrive->DestDistance = reqDistance;
 }
 
 void WheelPositionRequest(int angle)
@@ -310,7 +365,7 @@ void LoadOpcode(int b)
       expOperands = 1; //angle (0 - 180 where 0 = full left)
       break;
     case OPCODE_DRIVE:        
-      expOperands = 2; //reverse(0,1), speed
+      expOperands = 6; //reverse(0,1), speed, distance (4 bytes)
       break;
     case OPCODE_RECALIBRATE:
       break;
