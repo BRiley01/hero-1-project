@@ -45,6 +45,7 @@
 #define OPCODE_ABORT 0xFE
 
 #define DISC_PIN A2
+#define WHEEL_LIMIT A3
 
 // change this to the number of steps on your motor
 #define STEPS 300
@@ -86,7 +87,7 @@ volatile boolean StatusReq = false;
 volatile boolean commandLoaded = false;
 byte recBuffer[10];
 int recOperands, expOperands;
-const boolean EnableSerial = true;
+const boolean EnableSerial = false;
 volatile int sentBytes = 0;
 bool Encoder = HIGH;
 
@@ -104,6 +105,7 @@ void setup()
 
   //stepper.step(1200);
   pinMode(DISC_PIN, INPUT);
+  pinMode(WHEEL_LIMIT, INPUT);
   pinMode(A0, OUTPUT); // Main drive power
   pinMode(A1, OUTPUT); // Main drive direction
   DDRB = DDRB | B00111111;
@@ -122,13 +124,14 @@ void setup()
 void loop()
 {
   int step;
+  float limitPinV;
 
   int val = analogRead(DISC_PIN);  // read the input pin
   float volts = (val * 5.0) / 1023.0;
-
-  Serial.print(pDrive->Distance);
+  
+  /*Serial.print(pDrive->Distance);
   Serial.print(" of ");
-  Serial.println(pDrive->DestDistance);
+  Serial.println(pDrive->DestDistance);*/
   
   if(Encoder == HIGH && volts < .5)
   {
@@ -159,16 +162,32 @@ void loop()
     commandLoaded = false;
   }
   
-  if(!Status.Recalibrating)
+  if(Status.Recalibrating)
+  {
+    limitPinV = analogRead(WHEEL_LIMIT);
+    if (limitPinV < 400 || limitPinV > 1000)
+      stepper.step(-1);
+    else
+    {
+      pWheel->Pos = -600;
+      pWheel->Angle = -90;
+      pWheel->DestPos = 0;
+      pWheel->DestAngle = 90;
+      
+      Status.Recalibrating = false;
+    }
+  }
+  else
   {
     if(pWheel->Pos != pWheel->DestPos)
     {    
-      step = stepWheel();
+      step = stepWheel();  
+      
       stepper.step(step);
       if(pWheel->Pos == pWheel->DestPos)
         pWheel->DestAngle = pWheel->Angle;    
 
-      if(EnableSerial) PrintStatus();
+      //if(EnableSerial) PrintStatus();
     }
   }
 }
@@ -196,23 +215,6 @@ int calcStep(int angle)
   return pWheel->DestPos - pWheel->Pos;
 }
 
-void recalibrate()
-{
-  Status.Recalibrating = true;
-  if(EnableSerial) Serial.println("Calibrating...");
-  //assume starting position is 90
-  stepper.step(300); // bring to 45
-  stepper.step(-900);  // bring to 180 (all right)
-  stepper.step(1200);  // bring to 0 (all left)
-  stepper.step(-600);  // bring to 90 (center)  
-  pWheel->Pos = 0;
-  pWheel->Angle = 90;
-  pWheel->DestPos = 0;
-  pWheel->DestAngle = 90;
-  if(EnableSerial) Serial.println("Calibrated.");
-  Status.Recalibrating = false;
-}
-
 unsigned long BytesToLong(byte a, byte b, byte c, byte d)
 {
   return ((unsigned long)a << 24) | ((unsigned long)b << 16) | ((unsigned long)c << 8l) | (unsigned long)d;
@@ -220,12 +222,18 @@ unsigned long BytesToLong(byte a, byte b, byte c, byte d)
 
 void Execute()
 {
+  unsigned long distance;
+  if(EnableSerial) Serial.print("received command ");
+  if(EnableSerial) Serial.println(recBuffer[0]);
+
   switch(recBuffer[0])
   {
     case OPCODE_WHEEL_POSITION:
+      if(EnableSerial) Serial.println("Executing OPCODE_WHEEL_POSITION");
       WheelPositionRequest(recBuffer[1] - 90); //Convert (0 - 180) to (-90 - 90)
       break;    
     case OPCODE_DRIVE:
+      if(EnableSerial) Serial.println("Executing OPCODE_DRIVE");
       if(EnableSerial)
       {
         Serial.print(recBuffer[3]);
@@ -236,16 +244,21 @@ void Execute()
         Serial.print(":");
         Serial.println(recBuffer[6]);
       }
-      unsigned long distance = BytesToLong(recBuffer[3], recBuffer[4], recBuffer[5], recBuffer[6]);
+      distance = BytesToLong(recBuffer[3], recBuffer[4], recBuffer[5], recBuffer[6]);
       DriveRequest(recBuffer[1],recBuffer[2], distance);
       break;
     case OPCODE_RECALIBRATE:
-      recalibrate();
+      if(EnableSerial) Serial.println("Executing OPCODE_RECALIBRATE");
+      Status.Recalibrating = true;
       break;
     case OPCODE_ABORT:
+      if(EnableSerial) Serial.println("Executing OPCODE_ABORT");
       Abort();
       break;
+    default:
+      if(EnableSerial) Serial.println("unknown command");
   }
+  if(EnableSerial) Serial.println("Execute complete");
 }
 
 void Abort()
@@ -257,12 +270,15 @@ void Abort()
 
 void DriveRequest(bool forward, int reqSpeed, unsigned long reqDistance)
 {
-  Serial.print("forward: ");
-  Serial.print(forward);
-  Serial.print(";reqSpeed: ");
-  Serial.print(reqSpeed);
-  Serial.print(";reqDistance: ");
-  Serial.print(reqDistance);
+  if(EnableSerial)
+  {
+    Serial.print("forward: ");
+    Serial.print(forward);
+    Serial.print(";reqSpeed: ");
+    Serial.print(reqSpeed);
+    Serial.print(";reqDistance: ");
+    Serial.print(reqDistance);
+  }
   digitalWrite(A1, forward?LOW:HIGH);
   pDrive->Forward = forward;
   if(EnableSerial) Serial.print("Drive: " );
@@ -379,19 +395,22 @@ void LoadOpcode(int b)
 
 void PrintStatus()
 {
-  Serial.print(Status.Recalibrating);
-  Serial.print(" ");
-  Serial.print(Status.Wheel.Pos);
-  Serial.print(" ");
-  Serial.print(Status.Wheel.Angle);
-  Serial.print(" ");
-  Serial.print(Status.Wheel.DestPos);
-  Serial.print(" ");
-  Serial.print(Status.Wheel.DestAngle);
-  Serial.print(" ");
-  Serial.print(Status.Drive.Forward);
-  Serial.print(" ");
-  Serial.println(Status.Drive.Speed);
+  if(EnableSerial)
+  {
+    Serial.print(Status.Recalibrating);
+    Serial.print(" ");
+    Serial.print(Status.Wheel.Pos);
+    Serial.print(" ");
+    Serial.print(Status.Wheel.Angle);
+    Serial.print(" ");
+    Serial.print(Status.Wheel.DestPos);
+    Serial.print(" ");
+    Serial.print(Status.Wheel.DestAngle);
+    Serial.print(" ");
+    Serial.print(Status.Drive.Forward);
+    Serial.print(" ");
+    Serial.println(Status.Drive.Speed);
+  }
 }
 
 void LoadOperand(int b)
