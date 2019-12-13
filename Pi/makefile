@@ -1,6 +1,7 @@
 $(CXX) = g++
 INC_DIR = src
 CFLAGS = -I$(INC_DIR)
+OBJ = obj
 
 all: speechSynth heroSpeeches senseTest driveTest
 
@@ -48,3 +49,5 @@ obj/controller.o: src/controller.cpp
 
 clean:
 	rm -f obj/* bin/speechSynth bin/heroSpeeches bin/senseTest bin/driveTest
+
+$(shell mkdir -p $(OBJ))
