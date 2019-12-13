@@ -10,15 +10,30 @@ int main(int argc, char **argv)
 	Speech* sp;
 	unsigned char buffer[BUFFER_SIZE];
 	int status, lastStatus;
+    int x=1;
 	try
 	{
-		sp = new Speech("dictionary.db", I2C_SPEECH);		
+		sp = new Speech("/usr/share/dictionary.db", I2C_SPEECH);		
 	}
 	catch(int ex)
 	{
 		cout << "Speech library threw exception: " << ex << endl;
 		return -1;
 	}
+
+    if(argc > 1)
+    {
+        for(x = 1; x<argc; x++)
+        {
+            if(argv[x][0] != '-')
+            {
+                sp->Say(argv[x]);
+                while(sp->Status(buffer, BUFFER_SIZE) != SPEECH_STATUS_READY)
+                    usleep(10000); //sleep for 1 millisecond
+            }
+        }
+        return 0; 
+    }
 	
 	string phrase;
 	while(phrase != "q")

@@ -1,0 +1,4 @@
+#!/bin/bash
+
+sudo cp bin/speechSynth /usr/bin/tts
+sudo cp bin/dictionary.db /usr/share
