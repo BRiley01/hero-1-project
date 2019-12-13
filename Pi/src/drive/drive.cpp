@@ -48,13 +48,18 @@ bool DriveMotor::Recalibrate()
 	return true;
 }
 
-bool DriveMotor::Drive(bool forward, int speed)
+bool DriveMotor::Drive(bool forward, int speed, unsigned long distance)
 {
-	char buff[3];
+    char* block = (char*)&distance;
+	char buff[7];
 	buff[0] = OPCODE_DRIVE;
 	buff[1] = forward;
 	buff[2] = speed;
-	return write(buff, 3) == 3;
+    buff[3] = block[3];
+    buff[4] = block[2];
+    buff[5] = block[1];
+    buff[6] = block[0];
+	return write(buff, 7) == 7;
 }
 
 bool DriveMotor::Turn(int angle)

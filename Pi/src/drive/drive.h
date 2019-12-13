@@ -42,7 +42,7 @@ class DriveMotor: Controller
 		DriveMotor(int I2C_Address);
 		~DriveMotor();
 		bool Recalibrate();
-		bool Drive(bool forward, int speed);
+		bool Drive(bool forward, int speed, unsigned long distance = 0);
 		bool Turn(int angle);
 		
 		

@@ -9,11 +9,13 @@ using namespace std;
 bool fullTest(DriveMotor &motor);
 void showStatus(DriveMotor &motor);
 void speedTest(DriveMotor &motor);
+void distanceTest(DriveMotor &motor, unsigned long distance);
 
 int main(int argc, char **argv)
 {
 	DriveMotor motor(I2C_MOTOR);
 	int command;
+    unsigned long distance;
 	
 	cout << sizeof(t_DRIVE_STATUS) << endl << sizeof(t_DRIVE_INFO) << endl << sizeof(t_WHEEL_MOVEMENT) << endl;
 	
@@ -61,10 +63,19 @@ int main(int argc, char **argv)
 				break;
 			case 10:
 				speedTest(motor);
+                break;
+            case 11:
+                cin >> distance;
+                distanceTest(motor, distance);
 		}			
 	}
 	
 	return 0;
+}
+
+void distanceTest(DriveMotor &motor, unsigned long distance)
+{
+   motor.Drive(1, 64, distance); 
 }
 
 void speedTest(DriveMotor &motor)
@@ -85,6 +96,13 @@ void speedTest(DriveMotor &motor)
 		while(motor.Status().Drive.Speed != i);
 		usleep(1000000);
 	}
+    cout << "Reverse: 1" << endl;
+    motor.Drive(0, 1);
+    while(motor.Status().Drive.Speed != 1);
+    usleep(1000000);
+
+    cout << "Test Complete" << endl;
+    motor.Drive(0, 0);
 }
 
 void showStatus(DriveMotor &motor)
