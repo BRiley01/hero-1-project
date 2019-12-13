@@ -3,31 +3,34 @@ INC_DIR = src
 CFLAGS = -I$(INC_DIR)
 OBJ = obj
 
-all: speechSynth heroSpeeches senseTest driveTest
+all: speechSynth heroSpeeches senseTest driveTest sonarTest
 
 debug: CXX += -DDEBUG -g
-debug: speechSynth heroSpeeches senseTest driveTest
+debug: speechSynth heroSpeeches senseTest driveTest sonarTest
 
 heroSpeeches: obj/heroSpeeches.o obj/speech.o obj/controller.o
 	$(CXX) obj/heroSpeeches.o obj/speech.o obj/controller.o -lsqlite3 -o bin/heroSpeeches $(CFLAGS)
 
 obj/heroSpeeches.o: src/Apps/heroSpeeches.cpp
-	$(CXX) -c src/Apps/heroSpeeches.cpp -o $@ $(CFLAGS)	
-	
+	$(CXX) -c src/Apps/heroSpeeches.cpp -o $@ $(CFLAGS)		
 	
 driveTest: obj/driveTest.o obj/drive.o obj/controller.o
 	$(CXX) obj/driveTest.o obj/drive.o obj/controller.o -o bin/driveTest
 
 obj/driveTest.o: src/Apps/driveTest.cpp
 	$(CXX) -c src/Apps/driveTest.cpp -o $@ $(CFLAGS)
+	
+sonarTest: obj/sonarTest.o obj/sonar.o obj/controller.o
+	$(CXX) obj/sonarTest.o obj/sonar.o obj/controller.o -o bin/sonarTest
 
+obj/sonarTest.o: src/Apps/sonarTest.cpp
+	$(CXX) -c src/Apps/sonarTest.cpp -o $@ $(CFLAGS)
 
 speechSynth: obj/speechSynth.o obj/speech.o obj/controller.o
 	$(CXX) obj/speechSynth.o obj/speech.o obj/controller.o -lsqlite3 -o bin/speechSynth $(CFLAGS)
 
 obj/speechSynth.o: src/Apps/speechSynth.cpp
-	$(CXX) -c src/Apps/speechSynth.cpp -o $@ $(CFLAGS)
-	
+	$(CXX) -c src/Apps/speechSynth.cpp -o $@ $(CFLAGS)	
 
 senseTest: obj/senseTest.o obj/sense.o obj/controller.o
 	$(CXX) obj/senseTest.o obj/sense.o obj/controller.o -lwiringPi -o bin/senseTest
@@ -37,6 +40,9 @@ obj/senseTest.o: src/Apps/senseTest.cpp
 
 obj/drive.o: src/drive/drive.cpp
 	$(CXX) -c src/drive/drive.cpp -o $@ $(CFLAGS)
+	
+obj/sonar.o: src/sonar/sonar.cpp
+	$(CXX) -c src/sonar/sonar.cpp -o $@ $(CFLAGS)
 	
 obj/speech.o: src/speech/speech.cpp
 	$(CXX) -c src/speech/speech.cpp -o $@ $(CFLAGS)
@@ -48,6 +54,6 @@ obj/controller.o: src/controller.cpp
 	$(CXX) -c src/controller.cpp -o $@ $(CFLAGS)		
 
 clean:
-	rm -f obj/* bin/speechSynth bin/heroSpeeches bin/senseTest bin/driveTest
+	rm -f obj/* bin/speechSynth bin/heroSpeeches bin/senseTest bin/driveTest bin/sonarTest
 
 $(shell mkdir -p $(OBJ))
