@@ -62,10 +62,12 @@ bool Sonar::Disable()
 unsigned long Sonar::Distance()
 {
 	unsigned long micros = SonarDelay();
-	if (micros <= 10)
-		return (35 * micros) + 2300;
+    if(micros == SONAR_UNDEFINED_DISTANCE)
+        return SONAR_UNDEFINED_DISTANCE;
+	if (micros <= 2580l)
+	    return (micros / 35.0) - 63.71;
 	else
-		return (160 * micros) + 980;
+		return (micros / 160.0) - 6.125;
 }
 
 unsigned long Sonar::SonarDelay()
