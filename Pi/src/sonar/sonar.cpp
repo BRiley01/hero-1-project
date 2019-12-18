@@ -61,9 +61,19 @@ bool Sonar::Disable()
 
 unsigned long Sonar::Distance()
 {
+	unsigned long micros = SonarDelay();
+	if (micros <= 10)
+		return (35 * micros) + 2300;
+	else
+		return (160 * micros) + 980;
+}
+
+unsigned long Sonar::SonarDelay()
+{
 	unsigned long result;
 	if(read(&result, 4) != sizeof(result))
 		throw runtime_error("Distance request failed: unexpected response!");
-	return result;
+	return result;	
 }
+
 

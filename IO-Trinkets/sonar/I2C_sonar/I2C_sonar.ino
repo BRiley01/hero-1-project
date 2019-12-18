@@ -7,11 +7,13 @@
 
 #define UNDEFINED_DISTANCE 0xFFFFFFFF
 #define TIMEOUT 100000
-const boolean EnableSerial = false;
-volatile long gSent, gRecvd;
+const boolean EnableSerial = true;
+volatile unsigned long gSent, gRecvd;
 volatile boolean gEnabledReq = false;
 volatile boolean gEnabled = false;
 volatile unsigned long gDistance;
+
+volatile int x = 0;
 
 void AttachInterrupts()
 {
@@ -27,7 +29,11 @@ void DetatchInterrupts()
 
 void setup() {
   // put your setup code here, to run once:
-  if(EnableSerial) Serial.begin(9600);
+  if(EnableSerial)
+  {
+    Serial.begin(9600);
+    Serial.println("Started!");
+  }
   pinMode(A0, OUTPUT); // Sonar drive power
   pinMode(2, INPUT);   // Recv timer (goes high when received)
   pinMode(3, INPUT);   // Send timer (goes high when transmitted)
@@ -38,9 +44,11 @@ void setup() {
   Wire.begin(SLAVE_ADDRESS);
   Wire.onReceive(receiveData);
   Wire.onRequest(sendData);
+  Serial.println("xx");
 }
 
 void loop() {
+  Serial.println(x);
   unsigned long rcv = gRecvd, snd = gSent;
   if(gEnabledReq != gEnabled)
   {

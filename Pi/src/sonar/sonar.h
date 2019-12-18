@@ -12,5 +12,6 @@ class Sonar: Controller
 		~Sonar();
 		bool Enable();
 		bool Disable();
-		unsigned long Distance();		
+		unsigned long Distance();	
+		unsigned long SonarDelay();
 };
