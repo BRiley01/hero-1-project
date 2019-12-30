@@ -1,4 +1,5 @@
 #include <Wire.h>
+#include <pins_arduino.h>
 
 #define SLAVE_ADDRESS 0x06
 
@@ -7,6 +8,8 @@
 
 #define UNDEFINED_DISTANCE 0xFFFFFFFF
 #define TIMEOUT 100000
+#define RECV_PIN 8
+#define SEND_PIN 3
 const boolean EnableSerial = true;
 volatile unsigned long gSent, gRecvd;
 volatile boolean gEnabledReq = false;
@@ -17,14 +20,12 @@ volatile int x = 0;
 
 void AttachInterrupts()
 {
-  attachInterrupt(digitalPinToInterrupt(2), sonar_receive, RISING );
-  attachInterrupt(digitalPinToInterrupt(3), sonar_transmit, RISING );    
-}
-
-void DetatchInterrupts()
-{
-  detachInterrupt(digitalPinToInterrupt(2));
-  detachInterrupt(digitalPinToInterrupt(3));  
+  //Only pin 3 is an interrupt on the Trinket Pro.  this means we need the group pin change interrupt
+  //https://playground.arduino.cc/Main/PinChangeInterrupt/
+  *digitalPinToPCMSK(RECV_PIN) |= bit (digitalPinToPCMSKbit(RECV_PIN));  // enable pin
+  PCIFR  |= bit (digitalPinToPCICRbit(RECV_PIN)); // clear any outstanding interrupt
+  PCICR  |= bit (digitalPinToPCICRbit(RECV_PIN)); // enable interrupt for the group
+  attachInterrupt(digitalPinToInterrupt(SEND_PIN), sonar_transmit, RISING );    
 }
 
 void setup() {
@@ -35,8 +36,8 @@ void setup() {
     Serial.println("Started!");
   }
   pinMode(A0, OUTPUT); // Sonar drive power
-  pinMode(2, INPUT);   // Recv timer (goes high when received)
-  pinMode(3, INPUT);   // Send timer (goes high when transmitted)
+  pinMode(RECV_PIN, INPUT);   // Recv timer (goes high when received)
+  pinMode(SEND_PIN, INPUT);   // Send timer (goes high when transmitted)
   digitalWrite(A0, gEnabled); // Default to off
   
   AttachInterrupts();
@@ -44,11 +45,11 @@ void setup() {
   Wire.begin(SLAVE_ADDRESS);
   Wire.onReceive(receiveData);
   Wire.onRequest(sendData);
-  Serial.println("xx");
+  //Serial.println("xx");
 }
 
 void loop() {
-  Serial.println(x);
+  //Serial.println(x);
   unsigned long rcv = gRecvd, snd = gSent;
   if(gEnabledReq != gEnabled)
   {
@@ -75,8 +76,9 @@ void sonar_transmit()
   gSent = micros();
 }
 
-void sonar_receive()
-{
+ISR (PCINT0_vect) // handle pin change interrupt for D8 to D13 here
+{    
+  if(PINB & 0x01)
   gRecvd = micros();
 }
 
